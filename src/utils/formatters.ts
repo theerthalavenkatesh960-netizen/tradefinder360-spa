@@ -10,7 +10,10 @@ export const formatPrice = (price: number): string => {
   }).format(price);
 };
 
-export const formatPercent = (value: number): string => {
+export const formatPercent = (value?: number | null): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '—';
+  }
   const sign = value >= 0 ? '+' : '';
   return `${sign}${value.toFixed(2)}%`;
 };

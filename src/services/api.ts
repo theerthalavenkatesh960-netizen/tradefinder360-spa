@@ -202,7 +202,7 @@ export const api = {
 
     getAnalysis: async (symbol: string, timeframe = 15): Promise<Analysis> => {
       const response = await fetch(
-        `${API_BASE_URL}/instrument/${symbol}/analysis?timeframe=${timeframe}`,
+        `${API_BASE_URL}/instrumentanalysis/${symbol}/analysis?timeframe=${timeframe}`,
         { headers: getHeaders() }
       );
       if (!response.ok) throw new Error('Failed to fetch analysis');
@@ -211,7 +211,7 @@ export const api = {
 
     getRecommendation: async (symbol: string, timeframe = 15): Promise<Recommendation> => {
       const response = await fetch(
-        `${API_BASE_URL}/instrument/${symbol}/recommend?timeframe=${timeframe}`,
+        `${API_BASE_URL}/instrumentanalysis/${symbol}/recommend?timeframe=${timeframe}`,
         { method: 'POST', headers: getHeaders() }
       );
       if (!response.ok) throw new Error('Failed to fetch recommendation');
@@ -220,7 +220,7 @@ export const api = {
 
     getIndicators: async (symbol: string, timeframe = 15, limit = 50): Promise<Indicators[]> => {
       const response = await fetch(
-        `${API_BASE_URL}/instrument/${symbol}/indicators?timeframe=${timeframe}&limit=${limit}`,
+        `${API_BASE_URL}/instrumentanalysis/${symbol}/indicators?timeframe=${timeframe}&limit=${limit}`,
         { headers: getHeaders() }
       );
       if (!response.ok) throw new Error('Failed to fetch indicators');

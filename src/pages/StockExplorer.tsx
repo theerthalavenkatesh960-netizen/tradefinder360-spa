@@ -65,7 +65,7 @@ export const StockExplorer = () => {
                         {stock.symbol}
                       </a>
                     </td>
-                    <td className="px-6 py-4 font-semibold">{formatPrice(stock.lastClose)}</td>
+                    <td className="px-6 py-4 font-semibold">{formatPrice(stock.price)}</td>
                     <td className="px-6 py-4">
                       <span className={stock.changePercent >= 0 ? 'text-green-400' : 'text-red-400'}>
                         {formatPercent(stock.changePercent)}

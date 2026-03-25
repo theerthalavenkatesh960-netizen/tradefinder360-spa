@@ -20,11 +20,21 @@ export const StockDetail = () => {
     enabled: !!symbol,
   });
 
-  const { data: candles = [] } = useQuery({
-    queryKey: ['candles', symbol, timeframe],
-    queryFn: () => api.candles.get(symbol!, timeframe),
-    enabled: !!symbol,
-  });
+const { data: candles = [] } = useQuery({
+  queryKey: ['candles', symbol, timeframe],
+  queryFn: async () => {
+    const res = await api.candles.get(symbol!, timeframe);
+
+    // ✅ normalize response
+    if (Array.isArray(res)) return res;
+    if (Array.isArray((res as any)?.data)) return (res as any).data;
+    if (Array.isArray((res as any)?.candles)) return (res as any).candles;
+
+    console.error('Invalid candles response:', res);
+    return [];
+  },
+  enabled: !!symbol,
+});
 
   const { data: analysis } = useQuery({
     queryKey: ['analysis', symbol, timeframe],
@@ -138,7 +148,7 @@ export const StockDetail = () => {
                   </div>
                 </div>
 
-                {analysis.entryGuidance.direction !== 'NONE' && (
+                {analysis.entryGuidance &&analysis.entryGuidance.direction !== 'NONE' && (
                   <div className="bg-[#0a0a0f]/50 rounded-lg p-4 space-y-3">
                     <div className="flex justify-between">
                       <span className="text-gray-400">Direction</span>

@@ -1,5 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { createChart, IChartApi, ISeriesApi, CandlestickData, LineData } from 'lightweight-charts';
+import {
+  createChart,
+  IChartApi,
+  ISeriesApi,
+  CandlestickData,
+  LineData,
+  CandlestickSeries,
+  LineSeries,
+  UTCTimestamp,
+  createSeriesMarkers,
+} from 'lightweight-charts';
 import { Candle, Indicators } from '../services/api';
 
 interface CandleChartProps {
@@ -30,6 +40,8 @@ export const CandleChart = ({
   const emaSlowSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const bbUpperSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const bbLowerSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const toUTCTimestamp = (date: string | number | Date): UTCTimestamp =>
+  (new Date(date).getTime() / 1000) as UTCTimestamp;
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -68,7 +80,7 @@ export const CandleChart = ({
       },
     });
 
-    const candleSeries = chart.addCandlestickSeries({
+    const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderUpColor: '#22c55e',
@@ -77,26 +89,26 @@ export const CandleChart = ({
       wickDownColor: '#ef4444',
     });
 
-    const emaFastSeries = chart.addLineSeries({
+    const emaFastSeries = chart.addSeries(LineSeries, {
       color: '#3b82f6',
       lineWidth: 2,
       title: 'EMA Fast',
     });
 
-    const emaSlowSeries = chart.addLineSeries({
+    const emaSlowSeries = chart.addSeries(LineSeries, {
       color: '#f97316',
       lineWidth: 2,
       title: 'EMA Slow',
     });
 
-    const bbUpperSeries = chart.addLineSeries({
+    const bbUpperSeries = chart.addSeries(LineSeries, {
       color: '#6b7280',
       lineWidth: 1,
       lineStyle: 2,
       title: 'BB Upper',
     });
 
-    const bbLowerSeries = chart.addLineSeries({
+    const bbLowerSeries = chart.addSeries(LineSeries, {
       color: '#6b7280',
       lineWidth: 1,
       lineStyle: 2,
@@ -128,7 +140,7 @@ export const CandleChart = ({
     if (!candleSeriesRef.current) return;
 
     const candleData: CandlestickData[] = candles.map((c) => ({
-      time: new Date(c.timestamp).getTime() / 1000,
+      time: toUTCTimestamp(c.timestamp),
       open: c.open,
       high: c.high,
       low: c.low,
@@ -138,20 +150,22 @@ export const CandleChart = ({
     candleSeriesRef.current.setData(candleData);
   }, [candles]);
 
+  
+
   useEffect(() => {
     if (!indicators.length || !showEMA) return;
 
     const emaFastData: LineData[] = indicators
       .filter((i) => i.emaFast > 0)
       .map((i) => ({
-        time: new Date(i.timestamp).getTime() / 1000,
+        time: toUTCTimestamp(i.timestamp),
         value: i.emaFast,
       }));
 
     const emaSlowData: LineData[] = indicators
       .filter((i) => i.emaSlow > 0)
       .map((i) => ({
-        time: new Date(i.timestamp).getTime() / 1000,
+        time: toUTCTimestamp(i.timestamp),
         value: i.emaSlow,
       }));
 
@@ -165,14 +179,14 @@ export const CandleChart = ({
     const bbUpperData: LineData[] = indicators
       .filter((i) => i.bollingerUpper > 0)
       .map((i) => ({
-        time: new Date(i.timestamp).getTime() / 1000,
+        time: toUTCTimestamp(i.timestamp),
         value: i.bollingerUpper,
       }));
 
     const bbLowerData: LineData[] = indicators
       .filter((i) => i.bollingerLower > 0)
       .map((i) => ({
-        time: new Date(i.timestamp).getTime() / 1000,
+        time: toUTCTimestamp(i.timestamp),
         value: i.bollingerLower,
       }));
 
@@ -180,37 +194,33 @@ export const CandleChart = ({
     bbLowerSeriesRef.current?.setData(bbLowerData);
   }, [indicators, showBollinger]);
 
-  useEffect(() => {
-    if (!chartRef.current || !buySignals.length) return;
-
-    buySignals.forEach((signal) => {
-      candleSeriesRef.current?.setMarkers([
-        {
-          time: new Date(signal.time).getTime() / 1000,
-          position: 'belowBar',
-          color: '#22c55e',
-          shape: 'arrowUp',
-          text: 'BUY',
-        },
-      ]);
-    });
-  }, [buySignals]);
 
   useEffect(() => {
-    if (!chartRef.current || !sellSignals.length) return;
+    if (!candleSeriesRef.current) return;
 
-    sellSignals.forEach((signal) => {
-      candleSeriesRef.current?.setMarkers([
-        {
-          time: new Date(signal.time).getTime() / 1000,
-          position: 'aboveBar',
-          color: '#ef4444',
-          shape: 'arrowDown',
-          text: 'SELL',
-        },
-      ]);
-    });
-  }, [sellSignals]);
+    const buyMarkers = buySignals.map((signal) => ({
+      time: toUTCTimestamp(signal.time),
+      position: 'belowBar' as const,
+      color: '#22c55e',
+      shape: 'arrowUp' as const,
+      text: 'BUY',
+    }));
+
+    const sellMarkers = sellSignals.map((signal) => ({
+      time: toUTCTimestamp(signal.time),
+      position: 'aboveBar' as const,
+      color: '#ef4444',
+      shape: 'arrowDown' as const,
+      text: 'SELL',
+    }));
+
+    // ✅ MERGE BOTH
+    const allMarkers = [...buyMarkers, ...sellMarkers];
+
+    // ✅ SINGLE CALL
+    createSeriesMarkers(candleSeriesRef.current, allMarkers);
+
+  }, [buySignals, sellSignals]);
 
   return <div ref={chartContainerRef} className="w-full" />;
 };
