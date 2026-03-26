@@ -62,7 +62,6 @@ export const BacktestChart = ({
   const tradeBoxesRef = useRef<TradeBox[]>([]);
   const rafRef = useRef<number | null>(null);
 
-  // Stable prop refs so callbacks don't need deps on changing values
   const tradesRef = useRef(trades);
   const selectedIdRef = useRef(selectedTradeId);
   const hoveredIdRef = useRef(hoveredTradeId);
@@ -73,7 +72,6 @@ export const BacktestChart = ({
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
-  // Stable draw callback (reads from refs)
   const drawBoxes = useCallback(() => {
     const canvas = overlayRef.current;
     const chart = chartRef.current;
@@ -138,7 +136,6 @@ export const BacktestChart = ({
       ctx.lineWidth = isSelected ? 1.5 : 1;
       ctx.strokeRect(rectX, rectY, rectW, rectH);
 
-      // Draw entry price horizontal line inside box
       const entryY = series.priceToCoordinate(trade.entryPrice);
       if (entryY !== null && entryY >= rectY && entryY <= rectY + rectH) {
         ctx.beginPath();
@@ -156,7 +153,6 @@ export const BacktestChart = ({
     ctx.restore();
   }, []);
 
-  // Trigger drawBoxes when props change
   useEffect(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => drawBoxes());
@@ -215,13 +211,14 @@ export const BacktestChart = ({
     emaFastRef.current = emaFast;
     emaSlowRef.current = emaSlow;
 
-    // Subscribe to repaint events
-    const unsubscribeRange = chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+    // ✅ v5 fix: store the handler and use unsubscribeVisibleLogicalRangeChange
+    const handleRangeChange = () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => drawBoxes());
-    });
+    };
 
-    // ResizeObserver
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleRangeChange);
+
     const resizeObserver = new ResizeObserver(() => {
       if (containerRef.current) {
         chart.applyOptions({ width: containerRef.current.clientWidth });
@@ -231,7 +228,6 @@ export const BacktestChart = ({
     });
     if (containerRef.current) resizeObserver.observe(containerRef.current);
 
-    // Mouse events for hover detection
     const handleMouseMove = (e: MouseEvent) => {
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -271,17 +267,19 @@ export const BacktestChart = ({
       onTradeHover(null);
     };
 
-    containerRef.current.addEventListener('mousemove', handleMouseMove);
-    containerRef.current.addEventListener('click', handleClick);
-    containerRef.current.addEventListener('mouseleave', handleMouseLeave);
+    const el = containerRef.current;
+    el.addEventListener('mousemove', handleMouseMove);
+    el.addEventListener('click', handleClick);
+    el.addEventListener('mouseleave', handleMouseLeave);
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      unsubscribeRange();
+      // ✅ v5 fix: pass the same handler reference to unsubscribe
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange);
       resizeObserver.disconnect();
-      containerRef.current?.removeEventListener('mousemove', handleMouseMove);
-      containerRef.current?.removeEventListener('click', handleClick);
-      containerRef.current?.removeEventListener('mouseleave', handleMouseLeave);
+      el.removeEventListener('mousemove', handleMouseMove);
+      el.removeEventListener('click', handleClick);
+      el.removeEventListener('mouseleave', handleMouseLeave);
       chart.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -358,7 +356,6 @@ export const BacktestChart = ({
     const series = candleSeriesRef.current;
     if (!series) return;
 
-    // Remove old price lines
     activePriceLinesRef.current.forEach((line) => series.removePriceLine(line));
     activePriceLinesRef.current = [];
 
@@ -372,7 +369,7 @@ export const BacktestChart = ({
       lineWidth: 1,
       lineStyle: 0,
       axisLabelVisible: true,
-      title: `Entry`,
+      title: 'Entry',
     });
 
     const slLine = series.createPriceLine({
@@ -381,7 +378,7 @@ export const BacktestChart = ({
       lineWidth: 1,
       lineStyle: 2,
       axisLabelVisible: true,
-      title: `SL`,
+      title: 'SL',
     });
 
     const targetLine = series.createPriceLine({
@@ -390,12 +387,11 @@ export const BacktestChart = ({
       lineWidth: 1,
       lineStyle: 2,
       axisLabelVisible: true,
-      title: `Target`,
+      title: 'Target',
     });
 
     activePriceLinesRef.current = [entryLine, slLine, targetLine];
 
-    // Scroll chart to center this trade
     const entryMs = new Date(trade.entryTime).getTime();
     const exitMs = new Date(trade.exitTime).getTime();
     const pad = Math.max(exitMs - entryMs, 4 * 60 * 60 * 1000);
@@ -420,7 +416,6 @@ export const BacktestChart = ({
         />
       </div>
 
-      {/* Hover Tooltip */}
       <AnimatePresence>
         {tooltip && (
           <motion.div
@@ -442,7 +437,6 @@ export const BacktestChart = ({
         )}
       </AnimatePresence>
 
-      {/* Legend */}
       {trades.length > 0 && (
         <div className="absolute top-3 left-3 flex items-center space-x-3 z-20 pointer-events-none">
           <div className="flex items-center space-x-1">
@@ -492,9 +486,7 @@ const TradeTooltip = ({ trade }: { trade: BacktestTrade }) => {
         >
           {trade.tradeType}
         </span>
-        <span
-          className={`text-xs font-semibold ${isWin ? 'text-green-400' : 'text-red-400'}`}
-        >
+        <span className={`text-xs font-semibold ${isWin ? 'text-green-400' : 'text-red-400'}`}>
           {isWin ? '+' : ''}{formatPrice(trade.pnl)}
         </span>
       </div>
@@ -516,7 +508,6 @@ const TradeTooltip = ({ trade }: { trade: BacktestTrade }) => {
           <span className="text-gray-500">Target</span>
           <span className="text-green-400">{formatPrice(trade.target)}</span>
         </div>
-
         <div className="border-t border-gray-800 pt-1 mt-1 flex justify-between">
           <span className="text-gray-500">R:R</span>
           <span className="text-blue-300">1 : {rrAchieved.toFixed(2)}</span>
