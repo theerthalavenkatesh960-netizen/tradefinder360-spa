@@ -137,6 +137,65 @@ export interface PortfolioPosition {
   riskAmount: number;
 }
 
+export interface BacktestTrade {
+  id: string;
+  entryTime: string;
+  entryPrice: number;
+  exitTime: string;
+  exitPrice: number;
+  stopLoss: number;
+  target: number;
+  quantity: number;
+  pnl: number;
+  pnlPercent: number;
+  tradeType: 'LONG' | 'SHORT';
+}
+
+export interface EquityPoint {
+  timestamp: string;
+  equity: number;
+  dailyPnl?: number;
+}
+
+export interface BacktestMetrics {
+  totalTrades: number;
+  winRate: number;
+  totalPnl: number;
+  maxDrawdown: number;
+  avgRR: number;
+  winningTrades: number;
+  losingTrades: number;
+  totalReturn?: number;
+  profitFactor?: number;
+  equityCurve: EquityPoint[];
+}
+
+export interface BacktestResult {
+  trades: BacktestTrade[];
+  metrics: BacktestMetrics;
+}
+
+export interface BacktestRequest {
+  symbol: string;
+  from: string;
+  to: string;
+  strategy: {
+    name: 'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER';
+    params: {
+      timeframe: number;
+      riskPercent: number;
+      stopLossType: 'FIXED_PERCENT' | 'ATR' | 'CANDLE';
+      targetType: 'RR_RATIO' | 'TRAILING';
+      rrRatio?: number;
+      slPercent?: number;
+      fastEMA?: number;
+      slowEMA?: number;
+      rsiOverbought?: number;
+      rsiOversold?: number;
+    };
+  };
+}
+
 export interface PortfolioOptimization {
   positions: PortfolioPosition[];
   totalCapital: number;
@@ -416,6 +475,7 @@ export const api = {
     },
 
     backtest: async (params: {
+
       strategy: string;
       instrumentId: string;
       timeframeMinutes: number;
@@ -433,6 +493,18 @@ export const api = {
         body: JSON.stringify(params),
       });
       if (!response.ok) throw new Error('Failed to backtest strategy');
+      return response.json();
+    },
+  },
+
+  backtest: {
+    run: async (request: BacktestRequest): Promise<BacktestResult> => {
+      const response = await fetch(`${API_BASE_URL}/backtest`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(request),
+      });
+      if (!response.ok) throw new Error('Backtest failed');
       return response.json();
     },
   },
