@@ -1,0 +1,241 @@
+You are a senior frontend + backend architect and quantitative trading engineer.
+
+Enhance my existing project:
+GitHub Repo: https://github.com/theerthalavenkatesh960-netizen/tradefinder360-spa
+
+Goal:
+Build a **professional-grade backtesting engine + trade visualization system** on the Stock Detail Page.
+
+This must feel like **Zerodha Kite / TradingView-level UX**, not a basic implementation.
+
+---
+
+## 🧠 CORE FEATURES
+
+### 1. Strategy-Based Backtesting Engine
+
+* Allow user to select a **strategy** (initially support):
+
+  * Opening Range Breakout (ORB - 5 min high/low breakout)
+  * RSI-based reversal
+  * Moving Average crossover (EMA 9/21 or 20/50)
+
+* Strategy should be configurable:
+
+  * Timeframe (1m, 5m, 15m)
+  * Risk per trade (%)
+  * Stop loss logic (fixed %, ATR-based, candle low/high)
+  * Target logic (RR ratio like 1:2, trailing SL, etc.)
+
+* Backend (.NET service):
+
+  * Create `BacktestService`
+  * Input:
+
+    * symbol
+    * date range
+    * strategy config
+  * Output:
+
+    * List of trades:
+
+      * entryTime
+      * entryPrice
+      * exitTime
+      * exitPrice
+      * stopLoss
+      * target
+      * quantity
+      * pnl
+      * pnlPercent
+      * tradeType (LONG/SHORT)
+
+---
+
+## 📊 2. Chart Visualization (CRITICAL UX PART)
+
+Enhance existing chart component:
+
+### Overlay Trades on Candlestick Chart
+
+* For each trade:
+
+  * Show **entry marker**
+
+    * Green arrow ↑ for LONG
+    * Red arrow ↓ for SHORT
+  * Draw:
+
+    * Entry line
+    * Stop loss line (red)
+    * Target line (green)
+
+### Position Box (like Zerodha / TradingView)
+
+* Render a **shaded rectangle** from:
+
+  * entry → exit (time axis)
+  * stoploss → target (price axis)
+* Color:
+
+  * Green transparent for profitable trades
+  * Red transparent for losing trades
+
+### Interactions:
+
+* Hover on trade:
+
+  * Show tooltip:
+
+    * Entry / Exit
+    * PnL
+    * RR
+    * Duration
+* Click on trade:
+
+  * Highlight the trade
+  * Sync with trade list (scroll to it)
+
+---
+
+## 📋 3. Trade List Panel (Right Side / Bottom Drawer)
+
+* Show all trades in a **professional grid**
+
+* Columns:
+
+  * Date
+  * Trade Type (LONG/SHORT)
+  * Entry / Exit
+  * SL / Target
+  * Quantity
+  * PnL (₹ + %)
+  * RR achieved
+
+* Features:
+
+  * Sort by PnL, Date
+  * Filter (Winning / Losing / Long / Short)
+  * Click row → focus chart on that trade
+
+---
+
+## 📈 4. Performance Analytics Dashboard
+
+Above or below chart:
+
+* Total Trades
+* Win Rate
+* Total PnL
+* Max Drawdown
+* Avg RR
+* Equity Curve (line chart)
+* Daily PnL bars
+
+---
+
+## ⚡ 5. UI/UX REQUIREMENTS (VERY IMPORTANT)
+
+* Maintain current design system, but upgrade it to **premium trading UI**
+* Use:
+
+  * Smooth animations (Framer Motion)
+  * Clean spacing and typography
+  * Dark mode optimized
+* No clutter — professional minimalism
+
+### Layout:
+
+* Chart = primary focus (70%)
+* Side panel = trades + filters
+* Top bar = strategy selector + config
+
+---
+
+## ⚙️ 6. PERFORMANCE
+
+* Handle large datasets efficiently
+* Use:
+
+  * Memoization
+  * Virtualized lists (for trades)
+  * Lazy rendering for chart overlays
+
+---
+
+## 🧩 7. FRONTEND IMPLEMENTATION DETAILS
+
+* Extend existing CandleChart:
+
+  * Add overlay layer for trades
+
+* Create components:
+
+  * TradeMarkers
+  * TradeZones (position boxes)
+  * TradeTooltip
+  * TradeListPanel
+  * BacktestControls
+
+* State management:
+
+  * Use React Query for fetching backtest data
+  * Local state or Zustand for UI interactions
+
+---
+
+## 🔌 8. API DESIGN
+
+POST /api/backtest
+
+Request:
+{
+symbol: string,
+from: Date,
+to: Date,
+strategy: {
+name: string,
+params: {}
+}
+}
+
+Response:
+{
+trades: [],
+metrics: {
+totalTrades,
+winRate,
+pnl,
+drawdown,
+equityCurve[]
+}
+}
+
+---
+
+## 🧪 9. EDGE CASES
+
+* No trades → show empty state UI
+* Sideways market → low signals
+* High volatility → ensure SL/Target rendering correct
+
+---
+
+## 🎯 FINAL EXPECTATION
+
+This feature should:
+
+* Feel like a **pro trading terminal**
+* Be visually intuitive (user should “see” trades instantly)
+* Help decision-making, not just display data
+
+Think like:
+Combination of:
+
+* Zerodha Kite
+* TradingView strategy tester
+* Quant dashboard
+
+Deliver production-quality code.
+
+don't build all db tables again think of it ike i already have the api's , just build the ui , if there is already an api being used on something don't change it unless neccessary and also give me the assumed api details at the end, so that i can build them later if not available, i have another api repo
