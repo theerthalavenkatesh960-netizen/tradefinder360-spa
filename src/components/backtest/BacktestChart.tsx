@@ -9,7 +9,6 @@ import {
   CandlestickData,
   LineData,
   createSeriesMarkers,
-  IPriceLine,
 } from 'lightweight-charts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { differenceInMinutes } from 'date-fns';
@@ -22,6 +21,13 @@ interface TradeBox {
   y1: number;
   x2: number;
   y2: number;
+}
+
+interface TradeHitTarget {
+  id: string;
+  x: number;
+  y: number;
+  r: number;
 }
 
 interface TradeLane {
@@ -52,6 +58,8 @@ interface BacktestChartProps {
   onTradeSelect: (id: string) => void;
   onTradeHover: (id: string | null) => void;
   replayNowMs?: number | null;
+  replayIndex?: number;
+  replayFollowEnabled?: boolean;
 }
 
 const toUTC = (d: string | number | Date): UTCTimestamp =>
@@ -68,6 +76,8 @@ export const BacktestChart = ({
   onTradeSelect,
   onTradeHover,
   replayNowMs = null,
+  replayIndex = 0,
+  replayFollowEnabled = false,
 }: BacktestChartProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -75,9 +85,15 @@ export const BacktestChart = ({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const emaFastRef = useRef<ISeriesApi<'Line'> | null>(null);
   const emaSlowRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const activePriceLinesRef = useRef<IPriceLine[]>([]);
   const tradeBoxesRef = useRef<TradeBox[]>([]);
+  const tradeHitTargetsRef = useRef<TradeHitTarget[]>([]);
   const rafRef = useRef<number | null>(null);
+  const mouseRafRef = useRef<number | null>(null);
+  const replayCenterRafRef = useRef<number | null>(null);
+  const lastHoveredIdRef = useRef<string | null>(null);
+  const latestPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const lastRangeSpanRef = useRef(120);
+  const userAdjustedRangeRef = useRef(false);
 
   const tradesRef = useRef(trades);
   const selectedIdRef = useRef(selectedTradeId);
@@ -119,6 +135,7 @@ export const BacktestChart = ({
     const selectedId = selectedIdRef.current;
     const hoveredId = hoveredIdRef.current;
     const boxes: TradeBox[] = [];
+    const hitTargets: TradeHitTarget[] = [];
     const lanes: TradeLane[] = [];
 
     for (const trade of currentTrades) {
@@ -168,9 +185,14 @@ export const BacktestChart = ({
           isSelected,
           tradeType: trade.tradeType,
         });
+
+        hitTargets.push({ id: trade.id, x: x1, y: entryY, r: 8 });
+        if (isExited) {
+          hitTargets.push({ id: trade.id, x: x2, y: entryY, r: 8 });
+        }
       }
 
-      const alpha = isExited ? (isSelected ? 0.18 : isHovered ? 0.1 : 0.06) : isSelected ? 0.14 : 0.08;
+      const alpha = isExited ? (isSelected ? 0.18 : isHovered ? 0.1 : 0.05) : isSelected ? 0.14 : 0.06;
       const strokeAlpha = isExited ? (isSelected ? 0.8 : isHovered ? 0.6 : 0.3) : isSelected ? 0.75 : 0.45;
 
       ctx.fillStyle = isExited
@@ -187,6 +209,29 @@ export const BacktestChart = ({
         : `rgba(99, 102, 241, ${strokeAlpha})`;
       ctx.lineWidth = isSelected ? 1.5 : 1;
       ctx.strokeRect(rectX, rectY, rectW, rectH);
+
+      if (isSelected || isHovered) {
+        const tradeWidth = Math.max(Math.abs(x2 - x1), 2);
+        const tradeStart = Math.min(x1, x2);
+        const profitY = series.priceToCoordinate(trade.target);
+        const stopY = series.priceToCoordinate(trade.stopLoss);
+        const entryBandY = series.priceToCoordinate(trade.entryPrice);
+
+        if (profitY !== null && stopY !== null && entryBandY !== null) {
+          const upperProfit = Math.min(entryBandY, profitY);
+          const profitHeight = Math.max(Math.abs(entryBandY - profitY), 1);
+          const upperRisk = Math.min(entryBandY, stopY);
+          const riskHeight = Math.max(Math.abs(entryBandY - stopY), 1);
+
+          const profitTint = isWin ? 'rgba(34, 197, 94, 0.18)' : 'rgba(34, 197, 94, 0.08)';
+          const riskTint = isWin ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.18)';
+
+          ctx.fillStyle = profitTint;
+          ctx.fillRect(tradeStart, upperProfit, tradeWidth, profitHeight);
+          ctx.fillStyle = riskTint;
+          ctx.fillRect(tradeStart, upperRisk, tradeWidth, riskHeight);
+        }
+      }
 
       if (slY !== null) {
         ctx.beginPath();
@@ -265,6 +310,7 @@ export const BacktestChart = ({
     }
 
     tradeBoxesRef.current = boxes;
+    tradeHitTargetsRef.current = hitTargets;
     ctx.restore();
   }, []);
 
@@ -313,12 +359,16 @@ export const BacktestChart = ({
       color: 'rgba(147, 197, 253, 0.95)',
       lineWidth: 1,
       title: 'EMA F',
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
 
     const emaSlow = chart.addSeries(LineSeries, {
       color: 'rgba(251, 191, 110, 0.92)',
       lineWidth: 1,
       title: 'EMA S',
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
 
     chartRef.current = chart;
@@ -328,6 +378,12 @@ export const BacktestChart = ({
 
     // ✅ v5 fix: store the handler and use unsubscribeVisibleLogicalRangeChange
     const handleRangeChange = () => {
+      const range = chart.timeScale().getVisibleLogicalRange();
+      if (range) {
+        const span = Math.max(30, range.to - range.from);
+        lastRangeSpanRef.current = span;
+        userAdjustedRangeRef.current = true;
+      }
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => drawBoxes());
     };
@@ -343,25 +399,54 @@ export const BacktestChart = ({
     });
     if (containerRef.current) resizeObserver.observe(containerRef.current);
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
+    const processPointer = () => {
+      mouseRafRef.current = null;
+      const point = latestPointerRef.current;
+      if (!point) return;
+      const mx = point.x;
+      const my = point.y;
 
-      const hit = tradeBoxesRef.current.find(
+      const markerHit = tradeHitTargetsRef.current.find((h) => {
+        const dx = mx - h.x;
+        const dy = my - h.y;
+        return dx * dx + dy * dy <= h.r * h.r;
+      });
+
+      const boxHit = tradeBoxesRef.current.find(
         (b) => mx >= b.x1 && mx <= b.x2 && my >= b.y1 && my <= b.y2
       );
 
-      if (hit) {
-        const trade = tradesRef.current.find((t) => t.id === hit.id);
+      const hitId = markerHit?.id ?? boxHit?.id ?? null;
+
+      if (hitId) {
+        const trade = tradesRef.current.find((t) => t.id === hitId);
         if (trade) {
           setTooltip({ x: mx, y: my, trade });
-          onTradeHover(hit.id);
+          if (lastHoveredIdRef.current !== hitId) {
+            lastHoveredIdRef.current = hitId;
+            onTradeHover(hitId);
+          }
+          return;
         }
-      } else {
-        setTooltip(null);
+      }
+
+      setTooltip(null);
+      if (lastHoveredIdRef.current !== null) {
+        lastHoveredIdRef.current = null;
         onTradeHover(null);
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      latestPointerRef.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+
+      if (mouseRafRef.current === null) {
+        mouseRafRef.current = requestAnimationFrame(processPointer);
       }
     };
 
@@ -379,7 +464,15 @@ export const BacktestChart = ({
 
     const handleMouseLeave = () => {
       setTooltip(null);
-      onTradeHover(null);
+      latestPointerRef.current = null;
+      if (mouseRafRef.current !== null) {
+        cancelAnimationFrame(mouseRafRef.current);
+        mouseRafRef.current = null;
+      }
+      if (lastHoveredIdRef.current !== null) {
+        lastHoveredIdRef.current = null;
+        onTradeHover(null);
+      }
     };
 
     const el = containerRef.current;
@@ -389,6 +482,8 @@ export const BacktestChart = ({
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (mouseRafRef.current !== null) cancelAnimationFrame(mouseRafRef.current);
+      if (replayCenterRafRef.current !== null) cancelAnimationFrame(replayCenterRafRef.current);
       // ✅ v5 fix: pass the same handler reference to unsubscribe
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange);
       resizeObserver.disconnect();
@@ -413,7 +508,13 @@ export const BacktestChart = ({
     }));
 
     candleSeriesRef.current.setData(data);
-    chartRef.current?.timeScale().fitContent();
+    if (!userAdjustedRangeRef.current) {
+      chartRef.current?.timeScale().fitContent();
+      const range = chartRef.current?.timeScale().getVisibleLogicalRange();
+      if (range) {
+        lastRangeSpanRef.current = Math.max(30, range.to - range.from);
+      }
+    }
   }, [candles]);
 
   // ─── EMA data ─────────────────────────────────────────────────────────────
@@ -483,46 +584,11 @@ export const BacktestChart = ({
     createSeriesMarkers(candleSeriesRef.current, markers);
   }, [trades, selectedTradeId, replayNowMs]);
 
-  // ─── Selected trade: price lines + scroll ────────────────────────────────
+  // ─── Selected trade: scroll only ─────────────────────────────────────────
   useEffect(() => {
-    const series = candleSeriesRef.current;
-    if (!series) return;
-
-    activePriceLinesRef.current.forEach((line) => series.removePriceLine(line));
-    activePriceLinesRef.current = [];
-
     if (!selectedTradeId) return;
     const trade = trades.find((t) => t.id === selectedTradeId);
     if (!trade) return;
-
-    const entryLine = series.createPriceLine({
-      price: trade.entryPrice,
-      color: '#6366f1',
-      lineWidth: 2,
-      lineStyle: 0,
-      axisLabelVisible: true,
-      title: 'Entry',
-    });
-
-    const slLine = series.createPriceLine({
-      price: trade.stopLoss,
-      color: '#ef4444',
-      lineWidth: 1,
-      lineStyle: 2,
-      axisLabelVisible: true,
-      title: 'SL',
-    });
-
-    const targetLine = series.createPriceLine({
-      price: trade.target,
-      color: '#22c55e',
-      lineWidth: 1,
-      lineStyle: 2,
-      axisLabelVisible: true,
-      title: 'Target',
-    });
-
-    activePriceLinesRef.current = [entryLine, slLine, targetLine];
 
     const entryMs = new Date(trade.entryTime).getTime();
     const exitMs = new Date(trade.exitTime).getTime();
@@ -532,6 +598,26 @@ export const BacktestChart = ({
       to: ((exitMs + pad) / 1000) as UTCTimestamp,
     });
   }, [selectedTradeId, trades]);
+
+  useEffect(() => {
+    if (!replayFollowEnabled || replayNowMs === null || !candles.length || !chartRef.current) return;
+
+    const chart = chartRef.current;
+    const clampedIndex = clamp(replayIndex, 0, candles.length - 1);
+
+    if (replayCenterRafRef.current !== null) {
+      cancelAnimationFrame(replayCenterRafRef.current);
+    }
+
+    replayCenterRafRef.current = requestAnimationFrame(() => {
+      const span = Math.max(20, lastRangeSpanRef.current);
+      const leftRatio = 0.72;
+      chart.timeScale().setVisibleLogicalRange({
+        from: clampedIndex - span * leftRatio,
+        to: clampedIndex + span * (1 - leftRatio),
+      });
+    });
+  }, [replayFollowEnabled, replayNowMs, replayIndex, candles.length]);
 
   const winCount = trades.filter((trade) => trade.pnl >= 0).length;
   const lossCount = trades.length - winCount;

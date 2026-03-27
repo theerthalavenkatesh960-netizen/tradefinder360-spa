@@ -259,10 +259,11 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const [selectedIndicators, setSelectedIndicators] = useState<IndicatorKey[]>(['rsi', 'macd']);
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const [backtestRequest, setBacktestRequest] = useState<BacktestRequest | null>(null);
-  const [isReplayMode, setIsReplayMode] = useState(true);
+  const [isReplayMode, setIsReplayMode] = useState(false);
   const [isReplayPlaying, setIsReplayPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState<ReplaySpeed>(1);
   const [replayIndex, setReplayIndex] = useState(0);
+  const [isReplayFollowOn, setIsReplayFollowOn] = useState(true);
   const [replayEvents, setReplayEvents] = useState<ReplayEvent[]>([]);
   const [activeReplayEvent, setActiveReplayEvent] = useState<ReplayEvent | null>(null);
   const indicatorMenuRef = useRef<HTMLDivElement>(null);
@@ -394,8 +395,9 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
   const handleRunBacktest = (req: BacktestRequest) => {
     setSelectedTrade(null);
-    setIsReplayMode(true);
+    setIsReplayMode(false);
     setIsReplayPlaying(false);
+    setIsReplayFollowOn(true);
     setReplayIndex(0);
     setReplayEvents([]);
     setActiveReplayEvent(null);
@@ -411,12 +413,6 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     if (!isReplayMode || !backtestResult || replayTotalCandles === 0) return null;
     const safeIndex = Math.min(Math.max(replayIndex, 0), replayTotalCandles - 1);
     return new Date(replaySourceCandles[safeIndex].timestamp).getTime();
-  }, [isReplayMode, backtestResult, replayIndex, replaySourceCandles, replayTotalCandles]);
-
-  const visibleReplayCandles = useMemo(() => {
-    if (!isReplayMode || !backtestResult || replayTotalCandles === 0) return replaySourceCandles;
-    const count = Math.max(1, Math.min(replayIndex + 1, replayTotalCandles));
-    return replaySourceCandles.slice(0, count);
   }, [isReplayMode, backtestResult, replayIndex, replaySourceCandles, replayTotalCandles]);
 
   const allBacktestTrades = backtestResult?.trades ?? [];
@@ -446,6 +442,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
   const resetReplay = () => {
     setIsReplayPlaying(false);
+    setIsReplayFollowOn(true);
     setReplayIndex(0);
     setReplayEvents([]);
     setActiveReplayEvent(null);
@@ -455,8 +452,9 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
   useEffect(() => {
     if (!backtestResult || replayTotalCandles === 0) return;
-    setIsReplayMode(true);
+    setIsReplayMode(false);
     setIsReplayPlaying(false);
+    setIsReplayFollowOn(true);
     setReplayIndex(0);
     setReplayEvents([]);
     setActiveReplayEvent(null);
@@ -533,7 +531,9 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
       if (entryMs <= replayNowMs && !replayEntrySeenRef.current.has(trade.id)) {
         replayEntrySeenRef.current.add(trade.id);
-        const riskReward = trade.riskRewardRatio ? formatPrice(trade.riskRewardRatio, 2) : 'N/A';
+        const risk = Math.abs(trade.entryPrice - trade.stopLoss);
+        const reward = Math.abs(trade.target - trade.entryPrice);
+        const riskReward = risk > 0 ? (reward / risk).toFixed(2) : 'N/A';
         const qty = trade.quantity ? ` @ ${trade.quantity} qty` : '';
         nextEvents.push({
           id: `${trade.id}:entry`,
@@ -547,7 +547,9 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
       if (exitMs <= replayNowMs && !replayExitSeenRef.current.has(trade.id)) {
         replayExitSeenRef.current.add(trade.id);
         const pnlText = `${trade.pnl >= 0 ? '+' : ''}${formatPrice(trade.pnl)}`;
-        const rrRealized = trade.maxProfit ? formatPrice(trade.maxProfit / Math.max(1, trade.totalRisk || 1), 2) : 'N/A';
+        const risk = Math.abs(trade.entryPrice - trade.stopLoss);
+        const realizedReward = Math.abs(trade.exitPrice - trade.entryPrice);
+        const rrRealized = risk > 0 ? (realizedReward / risk).toFixed(2) : 'N/A';
         nextEvents.push({
           id: `${trade.id}:exit`,
           type: 'trade_exited',
@@ -1225,6 +1227,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                         <button
                           onClick={() => {
                             setIsReplayMode(true);
+                            setIsReplayFollowOn(true);
                             setSelectedTrade(null);
                           }}
                           className={`px-3 py-1 rounded-lg text-xs font-semibold border transition ${
@@ -1292,6 +1295,19 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                         )}
 
                         {isReplayMode && (
+                          <button
+                            onClick={() => setIsReplayFollowOn((prev) => !prev)}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition ${
+                              isReplayFollowOn
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                : 'bg-gray-900/30 text-gray-400 border-gray-700/60 hover:text-white'
+                            }`}
+                          >
+                            Follow {isReplayFollowOn ? 'On' : 'Off'}
+                          </button>
+                        )}
+
+                        {isReplayMode && (
                           <span className={`text-xs px-2 py-1 rounded-md border ${runningPnl >= 0 ? 'text-green-300 bg-green-500/10 border-green-500/30' : 'text-red-300 bg-red-500/10 border-red-500/30'}`}>
                             Running PnL: {formatPrice(runningPnl)}
                           </span>
@@ -1328,7 +1344,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                     <div className="flex flex-col lg:flex-row gap-4">
                       <div className="relative flex-1 min-w-0">
                         <BacktestChart
-                          candles={isReplayMode ? visibleReplayCandles : candles}
+                          candles={candles}
                           indicators={indicators}
                           trades={isReplayMode ? visibleTrades : backtestResult.trades}
                           selectedTradeId={selectedTradeId}
@@ -1336,6 +1352,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           onTradeSelect={setSelectedTrade}
                           onTradeHover={setHoveredTrade}
                           replayNowMs={isReplayMode ? replayNowMs : null}
+                          replayIndex={replayIndex}
+                          replayFollowEnabled={isReplayMode && isReplayFollowOn}
                         />
 
                         <AnimatePresence>
