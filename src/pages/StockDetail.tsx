@@ -655,7 +655,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
               <div className="space-y-6">
                 {analysisData && (
-                  <div className="space-y-5">
+                  <div className="grid grid-cols-3 gap-5">
                     <div className={`${analysisCardClass} p-4`}>
                       <div className="grid grid-cols-3 gap-2 text-xs">
                         <div className="rounded-lg border border-gray-700/50 bg-[#0a0a0f]/60 px-2 py-2">
