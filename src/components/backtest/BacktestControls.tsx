@@ -148,7 +148,9 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                           type="date"
                           value={from}
                           onChange={(e) => setFrom(e.target.value)}
-                          className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg pl-8 pr-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                          onClick={(e) => (e.target as HTMLInputElement).showPicker()}
+                          readOnly={false}
+                          className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg pl-8 pr-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50 cursor-pointer"
                         />
                       </div>
                     </div>
@@ -160,7 +162,9 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                           type="date"
                           value={to}
                           onChange={(e) => setTo(e.target.value)}
-                          className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg pl-8 pr-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                          onClick={(e) => (e.target as HTMLInputElement).showPicker()}
+                          readOnly={false}
+                          className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg pl-8 pr-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50 cursor-pointer"
                         />
                       </div>
                     </div>

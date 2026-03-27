@@ -265,6 +265,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const [replayIndex, setReplayIndex] = useState(0);
   const [isReplayFollowOn, setIsReplayFollowOn] = useState(true);
   const [isZoomPaused, setIsZoomPaused] = useState(false);
+  const [replayStartIndex, setReplayStartIndex] = useState(0);
   const [replayEvents, setReplayEvents] = useState<ReplayEvent[]>([]);
   const [activeReplayEvent, setActiveReplayEvent] = useState<ReplayEvent | null>(null);
   const indicatorMenuRef = useRef<HTMLDivElement>(null);
@@ -400,7 +401,13 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     setIsReplayPlaying(false);
     setIsReplayFollowOn(true);
     setIsZoomPaused(false);
-    setReplayIndex(0);
+    
+    const startDate = new Date(req.from).getTime();
+    const startIndex = candles.findIndex((c) => new Date(c.timestamp).getTime() >= startDate);
+    const initialIndex = Math.max(0, startIndex);
+    setReplayStartIndex(initialIndex);
+    setReplayIndex(initialIndex);
+    
     setReplayEvents([]);
     setActiveReplayEvent(null);
     replayEntrySeenRef.current.clear();
@@ -446,7 +453,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     setIsReplayPlaying(false);
     setIsReplayFollowOn(true);
     setIsZoomPaused(false);
-    setReplayIndex(0);
+    setReplayIndex(replayStartIndex);
     setReplayEvents([]);
     setActiveReplayEvent(null);
     replayEntrySeenRef.current.clear();
@@ -459,12 +466,12 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     setIsReplayPlaying(false);
     setIsReplayFollowOn(true);
     setIsZoomPaused(false);
-    setReplayIndex(0);
+    setReplayIndex(replayStartIndex);
     setReplayEvents([]);
     setActiveReplayEvent(null);
     replayEntrySeenRef.current.clear();
     replayExitSeenRef.current.clear();
-  }, [backtestResult, replayTotalCandles]);
+  }, [backtestResult, replayTotalCandles, replayStartIndex]);
 
   useEffect(() => {
     if (!isReplayMode || !isReplayPlaying || replayTotalCandles <= 1) return;
