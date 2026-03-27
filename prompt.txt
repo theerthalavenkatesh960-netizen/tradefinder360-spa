@@ -34,7 +34,8 @@ This must feel like **Zerodha Kite / TradingView-level UX**, not a basic impleme
 
     * symbol
     * date range
-    * strategy config
+    * strategy config  
+
   * Output:
 
     * List of trades:
