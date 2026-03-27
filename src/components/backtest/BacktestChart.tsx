@@ -32,6 +32,7 @@ interface TradeLane {
   yStop: number;
   yTarget: number;
   isWin: boolean;
+  isExited: boolean;
   isSelected: boolean;
   tradeType: BacktestTrade['tradeType'];
 }
@@ -50,6 +51,7 @@ interface BacktestChartProps {
   hoveredTradeId: string | null;
   onTradeSelect: (id: string) => void;
   onTradeHover: (id: string | null) => void;
+  replayNowMs?: number | null;
 }
 
 const toUTC = (d: string | number | Date): UTCTimestamp =>
@@ -65,6 +67,7 @@ export const BacktestChart = ({
   hoveredTradeId,
   onTradeSelect,
   onTradeHover,
+  replayNowMs = null,
 }: BacktestChartProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -79,10 +82,12 @@ export const BacktestChart = ({
   const tradesRef = useRef(trades);
   const selectedIdRef = useRef(selectedTradeId);
   const hoveredIdRef = useRef(hoveredTradeId);
+  const replayNowRef = useRef<number | null>(replayNowMs);
 
   useEffect(() => { tradesRef.current = trades; }, [trades]);
   useEffect(() => { selectedIdRef.current = selectedTradeId; }, [selectedTradeId]);
   useEffect(() => { hoveredIdRef.current = hoveredTradeId; }, [hoveredTradeId]);
+  useEffect(() => { replayNowRef.current = replayNowMs; }, [replayNowMs]);
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
@@ -117,8 +122,18 @@ export const BacktestChart = ({
     const lanes: TradeLane[] = [];
 
     for (const trade of currentTrades) {
+      const replayNow = replayNowRef.current;
+      const entryMs = new Date(trade.entryTime).getTime();
+      const exitMs = new Date(trade.exitTime).getTime();
+      const effectiveExitMs = replayNow !== null ? Math.min(exitMs, replayNow) : exitMs;
+      const isExited = replayNow !== null ? replayNow >= exitMs : true;
+
+      if (replayNow !== null && replayNow < entryMs) {
+        continue;
+      }
+
       const x1 = chart.timeScale().timeToCoordinate(toUTC(trade.entryTime));
-      const x2 = chart.timeScale().timeToCoordinate(toUTC(trade.exitTime));
+      const x2 = chart.timeScale().timeToCoordinate((effectiveExitMs / 1000) as UTCTimestamp);
       const priceHigh = Math.max(trade.stopLoss, trade.target);
       const priceLow = Math.min(trade.stopLoss, trade.target);
       const y1 = series.priceToCoordinate(priceHigh);
@@ -149,22 +164,27 @@ export const BacktestChart = ({
           yStop: slY,
           yTarget: targetY,
           isWin,
+          isExited,
           isSelected,
           tradeType: trade.tradeType,
         });
       }
 
-      const alpha = isSelected ? 0.18 : isHovered ? 0.1 : 0.06;
-      const strokeAlpha = isSelected ? 0.8 : isHovered ? 0.6 : 0.3;
+      const alpha = isExited ? (isSelected ? 0.18 : isHovered ? 0.1 : 0.06) : isSelected ? 0.14 : 0.08;
+      const strokeAlpha = isExited ? (isSelected ? 0.8 : isHovered ? 0.6 : 0.3) : isSelected ? 0.75 : 0.45;
 
-      ctx.fillStyle = isWin
+      ctx.fillStyle = isExited
+        ? isWin
         ? `rgba(34, 197, 94, ${alpha})`
-        : `rgba(239, 68, 68, ${alpha})`;
+        : `rgba(239, 68, 68, ${alpha})`
+        : `rgba(99, 102, 241, ${alpha})`;
       ctx.fillRect(rectX, rectY, rectW, rectH);
 
-      ctx.strokeStyle = isWin
+      ctx.strokeStyle = isExited
+        ? isWin
         ? `rgba(34, 197, 94, ${strokeAlpha})`
-        : `rgba(239, 68, 68, ${strokeAlpha})`;
+        : `rgba(239, 68, 68, ${strokeAlpha})`
+        : `rgba(99, 102, 241, ${strokeAlpha})`;
       ctx.lineWidth = isSelected ? 1.5 : 1;
       ctx.strokeRect(rectX, rectY, rectW, rectH);
 
@@ -200,10 +220,10 @@ export const BacktestChart = ({
       ctx.moveTo(lane.xStart, lane.yEntry);
       ctx.lineTo(lane.xEnd, lane.yEntry);
       ctx.strokeStyle = lineColor;
-      ctx.lineWidth = lane.isSelected ? 1.8 : 1.25;
+      ctx.lineWidth = lane.isSelected ? 1.6 : 1.15;
       ctx.stroke();
 
-      const arrowSize = 6;
+      const arrowSize = 5;
       ctx.beginPath();
       ctx.moveTo(lane.xEnd, lane.yEntry);
       ctx.lineTo(lane.xEnd - direction * arrowSize, lane.yEntry - arrowSize / 2);
@@ -211,8 +231,11 @@ export const BacktestChart = ({
       ctx.closePath();
       ctx.fillStyle = lineColor;
       ctx.fill();
+      ctx.strokeStyle = 'rgba(10, 10, 15, 0.95)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
 
-      const markerSize = 7;
+      const markerSize = 5.5;
       ctx.beginPath();
       if (lane.tradeType === 'LONG') {
         ctx.moveTo(lane.xStart, lane.yEntry - markerSize);
@@ -226,11 +249,19 @@ export const BacktestChart = ({
       ctx.closePath();
       ctx.fillStyle = lane.tradeType === 'LONG' ? '#22c55e' : '#ef4444';
       ctx.fill();
+      ctx.strokeStyle = 'rgba(10, 10, 15, 0.95)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
 
-      ctx.beginPath();
-      ctx.arc(lane.xEnd, lane.yEntry, 4.2, 0, Math.PI * 2);
-      ctx.fillStyle = lane.isWin ? '#22c55e' : '#ef4444';
-      ctx.fill();
+      if (lane.isExited) {
+        ctx.beginPath();
+        ctx.arc(lane.xEnd, lane.yEntry, 3.4, 0, Math.PI * 2);
+        ctx.fillStyle = lane.isWin ? '#22c55e' : '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(10, 10, 15, 0.95)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
     }
 
     tradeBoxesRef.current = boxes;
@@ -240,7 +271,7 @@ export const BacktestChart = ({
   useEffect(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => drawBoxes());
-  }, [trades, selectedTradeId, hoveredTradeId, drawBoxes]);
+  }, [trades, selectedTradeId, hoveredTradeId, replayNowMs, drawBoxes]);
 
   // ─── Create chart (once) ────────────────────────────────────────────────
   useEffect(() => {
@@ -270,22 +301,22 @@ export const BacktestChart = ({
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderUpColor: '#22c55e',
-      borderDownColor: '#ef4444',
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
+      upColor: '#86efac',
+      downColor: '#fda4af',
+      borderUpColor: '#4ade80',
+      borderDownColor: '#fb7185',
+      wickUpColor: '#bbf7d0',
+      wickDownColor: '#fecdd3',
     });
 
     const emaFast = chart.addSeries(LineSeries, {
-      color: '#3b82f6',
+      color: 'rgba(147, 197, 253, 0.95)',
       lineWidth: 1,
       title: 'EMA F',
     });
 
     const emaSlow = chart.addSeries(LineSeries, {
-      color: '#f97316',
+      color: 'rgba(251, 191, 110, 0.92)',
       lineWidth: 1,
       title: 'EMA S',
     });
@@ -406,8 +437,18 @@ export const BacktestChart = ({
     if (!candleSeriesRef.current) return;
 
     const markers = trades
-      .flatMap((trade) => [
-        {
+      .flatMap((trade) => {
+        const replayNow = replayNowMs;
+        const entryMs = new Date(trade.entryTime).getTime();
+        const exitMs = new Date(trade.exitTime).getTime();
+        const hasEntered = replayNow === null || replayNow >= entryMs;
+        const hasExited = replayNow === null || replayNow >= exitMs;
+
+        if (!hasEntered) {
+          return [];
+        }
+
+        const entryMarker = {
           time: toUTC(trade.entryTime),
           position: (trade.tradeType === 'LONG' ? 'belowBar' : 'aboveBar') as
             | 'belowBar'
@@ -418,8 +459,13 @@ export const BacktestChart = ({
             | 'arrowDown',
           text: trade.tradeType === 'LONG' ? 'L' : 'S',
           size: trade.id === selectedTradeId ? 2 : 1,
-        },
-        {
+        };
+
+        if (!hasExited) {
+          return [entryMarker];
+        }
+
+        const exitMarker = {
           time: toUTC(trade.exitTime),
           position: (trade.tradeType === 'LONG' ? 'aboveBar' : 'belowBar') as
             | 'belowBar'
@@ -428,12 +474,14 @@ export const BacktestChart = ({
           shape: 'circle' as const,
           text: '',
           size: 1,
-        },
-      ])
+        };
+
+        return [entryMarker, exitMarker];
+      })
       .sort((a, b) => (a.time as number) - (b.time as number));
 
     createSeriesMarkers(candleSeriesRef.current, markers);
-  }, [trades, selectedTradeId]);
+  }, [trades, selectedTradeId, replayNowMs]);
 
   // ─── Selected trade: price lines + scroll ────────────────────────────────
   useEffect(() => {
@@ -450,7 +498,7 @@ export const BacktestChart = ({
     const entryLine = series.createPriceLine({
       price: trade.entryPrice,
       color: '#6366f1',
-      lineWidth: 1.5,
+      lineWidth: 2,
       lineStyle: 0,
       axisLabelVisible: true,
       title: 'Entry',
