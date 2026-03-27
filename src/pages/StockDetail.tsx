@@ -547,7 +547,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
       </div>
 
       {/* Tab Switcher */}
-      <div className="flex items-center justify-between mb-5 gap-4">
+      <div className="flex items-center justify-between mb-5">
         <div className="flex space-x-1 bg-[#12121a]/60 border border-gray-800/50 rounded-xl p-1 w-fit">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
@@ -566,20 +566,20 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
         </div>
 
         {analysisData && activeTab === 'analysis' && (
-          <div className="flex-1 bg-gradient-to-r from-[#12121a]/75 to-[#0f1017]/70 backdrop-blur-xl border border-gray-800/60 rounded-lg p-3 flex items-center justify-around gap-4">
-            <div className="flex flex-col items-center">
-              <p className="text-gray-500 text-xs mb-1">Trend</p>
-              <p className="text-gray-100 font-semibold text-sm">{trendDisplayState.replace('_', ' ')}</p>
+          <div className="bg-[#12121a]/60 border border-gray-800/50 rounded-lg px-4 py-2 flex items-center gap-3 w-fit">
+            <div className="flex flex-col items-center gap-0.5">
+              <p className="text-gray-500 text-[10px] uppercase tracking-wide">Trend</p>
+              <p className="text-gray-100 font-semibold text-xs">{trendDisplayState.replace('_', ' ')}</p>
             </div>
-            <div className="w-px h-8 bg-gray-700/40"></div>
-            <div className="flex flex-col items-center">
-              <p className="text-gray-500 text-xs mb-1">Signal Score</p>
-              <p className="font-semibold text-sm" style={{ color: ringHue }}>{signalStrength.toFixed(1)} / 10</p>
+            <div className="w-px h-6 bg-gray-700/40"></div>
+            <div className="flex flex-col items-center gap-0.5">
+              <p className="text-gray-500 text-[10px] uppercase tracking-wide">Signal</p>
+              <p className="font-semibold text-xs" style={{ color: ringHue }}>{signalStrength.toFixed(1)}</p>
             </div>
-            <div className="w-px h-8 bg-gray-700/40"></div>
-            <div className="flex flex-col items-center">
-              <p className="text-gray-500 text-xs mb-1">Bias</p>
-              <p className={`font-semibold text-sm ${biasDirection === 'LONG' ? 'text-green-300' : biasDirection === 'SHORT' ? 'text-red-300' : 'text-gray-300'}`}>
+            <div className="w-px h-6 bg-gray-700/40"></div>
+            <div className="flex flex-col items-center gap-0.5">
+              <p className="text-gray-500 text-[10px] uppercase tracking-wide">Bias</p>
+              <p className={`font-semibold text-xs ${biasDirection === 'LONG' ? 'text-green-300' : biasDirection === 'SHORT' ? 'text-red-300' : 'text-gray-300'}`}>
                 {biasDirection}
               </p>
             </div>
