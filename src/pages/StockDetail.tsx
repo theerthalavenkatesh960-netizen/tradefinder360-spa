@@ -781,7 +781,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
         </div>
 
         {analysisData && activeTab === 'analysis' && (
-          <div className="bg-[#12121a]/60 border border-gray-800/50 rounded-lg px-4 py-2 flex items-center gap-3 w-fit">
+          <div className="bg-[#12121a]/60 border border-gray-800/50 rounded-lg px-6 py-2 flex items-center gap-3 w-fit">
             <div className="flex flex-col items-center gap-0.5">
               <p className="text-gray-500 text-[10px] uppercase tracking-wide">Trend</p>
               <p className="text-gray-100 font-semibold text-xs">{trendDisplayState.replace('_', ' ')}</p>
