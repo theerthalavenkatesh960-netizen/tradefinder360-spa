@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import {
   createChart,
   IChartApi,
@@ -60,6 +60,8 @@ interface BacktestChartProps {
   replayNowMs?: number | null;
   replayIndex?: number;
   replayFollowEnabled?: boolean;
+  isReplayPlaying?: boolean;
+  onReplayPauseFromZoom?: () => void;
 }
 
 const toUTC = (d: string | number | Date): UTCTimestamp =>
@@ -78,6 +80,8 @@ export const BacktestChart = ({
   replayNowMs = null,
   replayIndex = 0,
   replayFollowEnabled = false,
+  isReplayPlaying = false,
+  onReplayPauseFromZoom,
 }: BacktestChartProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -94,6 +98,7 @@ export const BacktestChart = ({
   const latestPointerRef = useRef<{ x: number; y: number } | null>(null);
   const lastRangeSpanRef = useRef(120);
   const userAdjustedRangeRef = useRef(false);
+  const isProgrammaticRangeChangeRef = useRef(false);
 
   const tradesRef = useRef(trades);
   const selectedIdRef = useRef(selectedTradeId);
@@ -106,6 +111,7 @@ export const BacktestChart = ({
   useEffect(() => { replayNowRef.current = replayNowMs; }, [replayNowMs]);
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const candleSourceSignatureRef = useRef('');
 
   const drawBoxes = useCallback(() => {
     const canvas = overlayRef.current;
@@ -137,6 +143,22 @@ export const BacktestChart = ({
     const boxes: TradeBox[] = [];
     const hitTargets: TradeHitTarget[] = [];
     const lanes: TradeLane[] = [];
+
+    if (replayNowRef.current !== null) {
+      const replayX = chart.timeScale().timeToCoordinate((replayNowRef.current / 1000) as UTCTimestamp);
+      if (replayX !== null) {
+        const glowHalfWidth = 6;
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.1)';
+        ctx.fillRect(replayX - glowHalfWidth, 0, glowHalfWidth * 2, height);
+
+        ctx.beginPath();
+        ctx.moveTo(replayX, 0);
+        ctx.lineTo(replayX, height);
+        ctx.strokeStyle = 'rgba(129, 140, 248, 0.65)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
 
     for (const trade of currentTrades) {
       const replayNow = replayNowRef.current;
@@ -381,8 +403,18 @@ export const BacktestChart = ({
       const range = chart.timeScale().getVisibleLogicalRange();
       if (range) {
         const span = Math.max(30, range.to - range.from);
+        const previousSpan = lastRangeSpanRef.current;
         lastRangeSpanRef.current = span;
-        userAdjustedRangeRef.current = true;
+
+        if (isProgrammaticRangeChangeRef.current) {
+          isProgrammaticRangeChangeRef.current = false;
+        } else {
+          userAdjustedRangeRef.current = true;
+          const spanDelta = Math.abs(span - previousSpan);
+          if (spanDelta > 0.5 && replayNowRef.current !== null && isReplayPlaying) {
+            onReplayPauseFromZoom?.();
+          }
+        }
       }
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => drawBoxes());
@@ -495,27 +527,62 @@ export const BacktestChart = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const styledCandles = useMemo(() => {
+    if (!candles.length) return [] as CandlestickData[];
+
+    const replayCutoff = replayNowMs ?? Number.POSITIVE_INFINITY;
+
+    return candles.map((candle) => {
+      const time = toUTC(candle.timestamp);
+      const isUp = candle.close >= candle.open;
+      const isRevealed = new Date(candle.timestamp).getTime() <= replayCutoff;
+
+      if (isRevealed) {
+        return {
+          time,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          color: isUp ? '#22c55e' : '#ef4444',
+          borderColor: isUp ? '#4ade80' : '#f87171',
+          wickColor: isUp ? '#86efac' : '#fca5a5',
+        };
+      }
+
+      return {
+        time,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        color: isUp ? 'rgba(75, 85, 99, 0.33)' : 'rgba(71, 85, 105, 0.33)',
+        borderColor: isUp ? 'rgba(107, 114, 128, 0.48)' : 'rgba(107, 114, 128, 0.48)',
+        wickColor: isUp ? 'rgba(107, 114, 128, 0.4)' : 'rgba(107, 114, 128, 0.4)',
+      };
+    });
+  }, [candles, replayNowMs]);
+
   // ─── Candle data ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!candleSeriesRef.current || !candles.length) return;
+    if (!candleSeriesRef.current || !styledCandles.length) return;
 
-    const data: CandlestickData[] = candles.map((c) => ({
-      time: toUTC(c.timestamp),
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-    }));
+    candleSeriesRef.current.setData(styledCandles);
 
-    candleSeriesRef.current.setData(data);
-    if (!userAdjustedRangeRef.current) {
+    const sourceSignature = `${candles.length}:${candles[0]?.timestamp ?? ''}:${candles[candles.length - 1]?.timestamp ?? ''}`;
+    const isNewSource = candleSourceSignatureRef.current !== sourceSignature;
+    if (isNewSource) {
+      candleSourceSignatureRef.current = sourceSignature;
+    }
+
+    if (isNewSource && !userAdjustedRangeRef.current) {
       chartRef.current?.timeScale().fitContent();
       const range = chartRef.current?.timeScale().getVisibleLogicalRange();
       if (range) {
         lastRangeSpanRef.current = Math.max(30, range.to - range.from);
       }
     }
-  }, [candles]);
+  }, [candles, styledCandles]);
 
   // ─── EMA data ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -593,6 +660,7 @@ export const BacktestChart = ({
     const entryMs = new Date(trade.entryTime).getTime();
     const exitMs = new Date(trade.exitTime).getTime();
     const pad = Math.max(exitMs - entryMs, 4 * 60 * 60 * 1000);
+    isProgrammaticRangeChangeRef.current = true;
     chartRef.current?.timeScale().setVisibleRange({
       from: ((entryMs - pad) / 1000) as UTCTimestamp,
       to: ((exitMs + pad) / 1000) as UTCTimestamp,
@@ -611,7 +679,8 @@ export const BacktestChart = ({
 
     replayCenterRafRef.current = requestAnimationFrame(() => {
       const span = Math.max(20, lastRangeSpanRef.current);
-      const leftRatio = 0.72;
+      const leftRatio = 0.5;
+      isProgrammaticRangeChangeRef.current = true;
       chart.timeScale().setVisibleLogicalRange({
         from: clampedIndex - span * leftRatio,
         to: clampedIndex + span * (1 - leftRatio),

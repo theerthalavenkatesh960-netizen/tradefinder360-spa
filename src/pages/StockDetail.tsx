@@ -264,6 +264,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const [replaySpeed, setReplaySpeed] = useState<ReplaySpeed>(1);
   const [replayIndex, setReplayIndex] = useState(0);
   const [isReplayFollowOn, setIsReplayFollowOn] = useState(true);
+  const [isZoomPaused, setIsZoomPaused] = useState(false);
   const [replayEvents, setReplayEvents] = useState<ReplayEvent[]>([]);
   const [activeReplayEvent, setActiveReplayEvent] = useState<ReplayEvent | null>(null);
   const indicatorMenuRef = useRef<HTMLDivElement>(null);
@@ -398,6 +399,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     setIsReplayMode(false);
     setIsReplayPlaying(false);
     setIsReplayFollowOn(true);
+    setIsZoomPaused(false);
     setReplayIndex(0);
     setReplayEvents([]);
     setActiveReplayEvent(null);
@@ -443,6 +445,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const resetReplay = () => {
     setIsReplayPlaying(false);
     setIsReplayFollowOn(true);
+    setIsZoomPaused(false);
     setReplayIndex(0);
     setReplayEvents([]);
     setActiveReplayEvent(null);
@@ -455,6 +458,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     setIsReplayMode(false);
     setIsReplayPlaying(false);
     setIsReplayFollowOn(true);
+    setIsZoomPaused(false);
     setReplayIndex(0);
     setReplayEvents([]);
     setActiveReplayEvent(null);
@@ -1228,6 +1232,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           onClick={() => {
                             setIsReplayMode(true);
                             setIsReplayFollowOn(true);
+                            setIsZoomPaused(false);
                             setSelectedTrade(null);
                           }}
                           className={`px-3 py-1 rounded-lg text-xs font-semibold border transition ${
@@ -1242,6 +1247,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           onClick={() => {
                             setIsReplayMode(false);
                             setIsReplayPlaying(false);
+                            setIsZoomPaused(false);
                             setActiveReplayEvent(null);
                           }}
                           className={`px-3 py-1 rounded-lg text-xs font-semibold border transition ${
@@ -1256,7 +1262,12 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
                       <div className="flex flex-wrap items-center gap-2">
                         <button
-                          onClick={() => setIsReplayPlaying((prev) => !prev)}
+                          onClick={() => {
+                            if (!isReplayPlaying) {
+                              setIsZoomPaused(false);
+                            }
+                            setIsReplayPlaying((prev) => !prev);
+                          }}
                           disabled={!isReplayMode || replayTotalCandles <= 1}
                           className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold border border-indigo-500/30 text-indigo-200 bg-indigo-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
@@ -1287,6 +1298,12 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                             {speed}x
                           </button>
                         ))}
+
+                        {isReplayMode && isZoomPaused && !isReplayPlaying && (
+                          <span className="text-xs px-2 py-1 rounded-md border text-amber-200 bg-amber-500/10 border-amber-500/30">
+                            Paused (Zoom)
+                          </span>
+                        )}
 
                         {isReplayMode && (
                           <span className="text-xs text-gray-400 px-2">
@@ -1326,6 +1343,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                             value={replayIndex}
                             onChange={(e) => {
                               setIsReplayPlaying(false);
+                              setIsZoomPaused(false);
                               setReplayIndex(parseInt(e.target.value, 10));
                             }}
                             disabled={isReplayPlaying}
@@ -1354,6 +1372,11 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           replayNowMs={isReplayMode ? replayNowMs : null}
                           replayIndex={replayIndex}
                           replayFollowEnabled={isReplayMode && isReplayFollowOn}
+                          isReplayPlaying={isReplayMode && isReplayPlaying}
+                          onReplayPauseFromZoom={() => {
+                            setIsReplayPlaying(false);
+                            setIsZoomPaused(true);
+                          }}
                         />
 
                         <AnimatePresence>
