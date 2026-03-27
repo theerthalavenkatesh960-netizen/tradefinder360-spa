@@ -109,3 +109,47 @@ Keep the dark theme (#0a0a0f, #12121a, #1a1a2e, gray-800 borders, indigo-500 acc
 No new dependencies — use only what's already imported (framer-motion, lucide-react, lightweight-charts, date-fns)
 TypeScript strict — no any types
 Do not change API service files or store files
+
+
+{
+  "instrumentKey": "NSE_EQ|INE040A01034",
+  "symbol": "HDFCBANK",
+  "exchange": "NSE",
+  "indicators": {
+    "emaFast": 763.8521,
+    "emaSlow": 764.6645,
+    "rsi": 56.7967,
+    "macdLine": 2.7354,
+    "macdSignal": 2.7371,
+    "macdHistogram": -0.0018,
+    "adx": 28.4258,
+    "plusDI": 22.5181,
+    "minusDI": 17.7424,
+    "atr": 4.1568,
+    "bollingerUpper": 775.0118,
+    "bollingerMiddle": 763.5325,
+    "bollingerLower": 752.0532,
+    "vwap": 761.7835,
+    "timestamp": "2026-03-24T09:45:00+00:00"
+  },
+  "trendState": {
+    "state": "TRENDING_BEARISH",
+    "bias": "BEARISH",
+    "setupScore": 67,
+    "qualityLabel": "WATCHLIST",
+    "scoreBreakdown": {
+      "adx": 20,
+      "rsi": 10,
+      "emaVwap": 14,
+      "volume": 15,
+      "bollinger": 8,
+      "structure": 0,
+      "total": 67
+    }
+  },
+  "entryGuidance": null,
+  "confidence": 67,
+  "explanation": "No active recommendation — market state is TRENDING_BEARISH, not PULLBACK_READY",
+  "reasoningPoints": [],
+  "analysedAt": "2026-03-27T07:31:40.98648+00:00"
+}
