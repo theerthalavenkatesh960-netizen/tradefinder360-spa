@@ -5,8 +5,10 @@ import {
   ISeriesApi,
   CandlestickData,
   LineData,
+  HistogramData,
   CandlestickSeries,
   LineSeries,
+  HistogramSeries,
   UTCTimestamp,
   createSeriesMarkers,
 } from 'lightweight-charts';
@@ -21,6 +23,8 @@ interface CandleChartProps {
   target?: number;
   showEMA?: boolean;
   showBollinger?: boolean;
+  showRSI?: boolean;
+  showMACD?: boolean;
 }
 
 export const CandleChart = ({
@@ -32,6 +36,8 @@ export const CandleChart = ({
   target,
   showEMA = true,
   showBollinger = true,
+  showRSI = true,
+  showMACD = true,
 }: CandleChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -41,6 +47,12 @@ export const CandleChart = ({
   const bbUpperSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const bbMiddleSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const bbLowerSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const rsiOverboughtRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const rsiOversoldRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdLineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdSignalSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdHistogramSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const toUTCTimestamp = (date: string | number | Date): UTCTimestamp =>
   (new Date(date).getTime() / 1000) as UTCTimestamp;
 
@@ -57,7 +69,7 @@ export const CandleChart = ({
         horzLines: { color: '#1f2937' },
       },
       width: chartContainerRef.current.clientWidth,
-      height: 500,
+      height: chartContainerRef.current.clientHeight,
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
@@ -65,6 +77,10 @@ export const CandleChart = ({
       },
       rightPriceScale: {
         borderColor: '#374151',
+        scaleMargins: {
+          top: 0.02,
+          bottom: 0.42,
+        },
       },
       crosshair: {
         mode: 1,
@@ -123,6 +139,65 @@ export const CandleChart = ({
       title: 'BB Lower',
     });
 
+    const rsiSeries = chart.addSeries(LineSeries, {
+      color: '#8b5cf6',
+      lineWidth: 1.4,
+      title: 'RSI',
+      priceScaleId: 'rsi',
+    });
+
+    const rsiOverbought = chart.addSeries(LineSeries, {
+      color: '#ef4444',
+      lineWidth: 1,
+      lineStyle: 2,
+      title: 'RSI 70',
+      priceScaleId: 'rsi',
+    });
+
+    const rsiOversold = chart.addSeries(LineSeries, {
+      color: '#22c55e',
+      lineWidth: 1,
+      lineStyle: 2,
+      title: 'RSI 30',
+      priceScaleId: 'rsi',
+    });
+
+    const macdLineSeries = chart.addSeries(LineSeries, {
+      color: '#22c55e',
+      lineWidth: 1.4,
+      title: 'MACD',
+      priceScaleId: 'macd',
+    });
+
+    const macdSignalSeries = chart.addSeries(LineSeries, {
+      color: '#ef4444',
+      lineWidth: 1.4,
+      title: 'MACD Signal',
+      priceScaleId: 'macd',
+    });
+
+    const macdHistogramSeries = chart.addSeries(HistogramSeries, {
+      title: 'MACD Hist',
+      priceScaleId: 'macd',
+      priceFormat: { type: 'volume' },
+    });
+
+    chart.priceScale('rsi').applyOptions({
+      borderColor: '#374151',
+      scaleMargins: {
+        top: 0.62,
+        bottom: 0.2,
+      },
+    });
+
+    chart.priceScale('macd').applyOptions({
+      borderColor: '#374151',
+      scaleMargins: {
+        top: 0.82,
+        bottom: 0.02,
+      },
+    });
+
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     emaFastSeriesRef.current = emaFastSeries;
@@ -130,10 +205,19 @@ export const CandleChart = ({
     bbUpperSeriesRef.current = bbUpperSeries;
     bbMiddleSeriesRef.current = bbMiddleSeries;
     bbLowerSeriesRef.current = bbLowerSeries;
+    rsiSeriesRef.current = rsiSeries;
+    rsiOverboughtRef.current = rsiOverbought;
+    rsiOversoldRef.current = rsiOversold;
+    macdLineSeriesRef.current = macdLineSeries;
+    macdSignalSeriesRef.current = macdSignalSeries;
+    macdHistogramSeriesRef.current = macdHistogramSeries;
 
     const handleResize = () => {
       if (chartContainerRef.current && chart) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+        chart.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
       }
     };
 
@@ -220,6 +304,71 @@ export const CandleChart = ({
     bbLowerSeriesRef.current?.setData(bbLowerData);
   }, [indicators, showBollinger]);
 
+  useEffect(() => {
+    if (!showRSI || !indicators.length) {
+      rsiSeriesRef.current?.setData([]);
+      rsiOverboughtRef.current?.setData([]);
+      rsiOversoldRef.current?.setData([]);
+      return;
+    }
+
+    const rsiData: LineData[] = indicators
+      .filter((i) => Number.isFinite(i.rsi))
+      .map((i) => ({
+        time: toUTCTimestamp(i.timestamp),
+        value: Math.max(0, Math.min(100, i.rsi)),
+      }));
+
+    const rsiOverData: LineData[] = rsiData.map((point) => ({
+      time: point.time,
+      value: 70,
+    }));
+
+    const rsiUnderData: LineData[] = rsiData.map((point) => ({
+      time: point.time,
+      value: 30,
+    }));
+
+    rsiSeriesRef.current?.setData(rsiData);
+    rsiOverboughtRef.current?.setData(rsiOverData);
+    rsiOversoldRef.current?.setData(rsiUnderData);
+  }, [indicators, showRSI]);
+
+  useEffect(() => {
+    if (!showMACD || !indicators.length) {
+      macdLineSeriesRef.current?.setData([]);
+      macdSignalSeriesRef.current?.setData([]);
+      macdHistogramSeriesRef.current?.setData([]);
+      return;
+    }
+
+    const macdLineData: LineData[] = indicators
+      .filter((i) => Number.isFinite(i.macdLine))
+      .map((i) => ({
+        time: toUTCTimestamp(i.timestamp),
+        value: i.macdLine,
+      }));
+
+    const macdSignalData: LineData[] = indicators
+      .filter((i) => Number.isFinite(i.macdSignal))
+      .map((i) => ({
+        time: toUTCTimestamp(i.timestamp),
+        value: i.macdSignal,
+      }));
+
+    const macdHistData: HistogramData[] = indicators
+      .filter((i) => Number.isFinite(i.macdHistogram))
+      .map((i) => ({
+        time: toUTCTimestamp(i.timestamp),
+        value: i.macdHistogram,
+        color: i.macdHistogram >= 0 ? '#22c55e' : '#ef4444',
+      }));
+
+    macdLineSeriesRef.current?.setData(macdLineData);
+    macdSignalSeriesRef.current?.setData(macdSignalData);
+    macdHistogramSeriesRef.current?.setData(macdHistData);
+  }, [indicators, showMACD]);
+
 
   useEffect(() => {
     if (!candleSeriesRef.current) return;
@@ -248,5 +397,5 @@ export const CandleChart = ({
 
   }, [buySignals, sellSignals]);
 
-  return <div ref={chartContainerRef} className="w-full" />;
+  return <div ref={chartContainerRef} className="w-full h-[78vh] min-h-[560px]" />;
 };

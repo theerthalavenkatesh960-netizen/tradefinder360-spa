@@ -8,8 +8,6 @@ import type { Analysis, BacktestRequest, Candle, Stock } from '../services/api';
 import { useWatchlistStore } from '../store/watchlist';
 import { useBacktestStore } from '../store/backtest';
 import { CandleChart } from '../components/CandleChart';
-import { RSIPanel } from '../components/RSIPanel';
-import { MACDPanel } from '../components/MACDPanel';
 import { BacktestControls } from '../components/backtest/BacktestControls';
 import { BacktestMetricsBar } from '../components/backtest/BacktestMetrics';
 import { BacktestChart } from '../components/backtest/BacktestChart';
@@ -250,7 +248,6 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const [hasChangedTimeframe, setHasChangedTimeframe] = useState(false);
   const [isIndicatorMenuOpen, setIsIndicatorMenuOpen] = useState(false);
   const [selectedIndicators, setSelectedIndicators] = useState<IndicatorKey[]>(['rsi', 'macd']);
-  const [showAnalysis, setShowAnalysis] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const [backtestRequest, setBacktestRequest] = useState<BacktestRequest | null>(null);
   const indicatorMenuRef = useRef<HTMLDivElement>(null);
@@ -333,10 +330,10 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     (activeTab === 'analysis' || activeTab === 'backtest') &&
     selectedIndicators.length > 0;
 
-  const { data: analysis } = useQuery({
+  const { data: analysis, isLoading: isAnalysisLoading } = useQuery({
     queryKey: ['analysis', symbol, timeframe],
     queryFn: () => api.instruments.getAnalysis(symbol!, timeframe),
-    enabled: !!symbol && activeTab === 'analysis' && showAnalysis,
+    enabled: !!symbol && activeTab === 'analysis',
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -515,7 +512,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   }, [isIndicatorMenuOpen]);
 
   return (
-    <div className="max-w-[1600px] mx-auto">
+    <div className="w-full max-w-none">
       {/* Top Bar */}
       <div className="mb-5 flex items-center justify-between">
         <Link to="/stocks" className="flex items-center text-gray-400 hover:text-white transition">
@@ -577,9 +574,9 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.18 }}
           >
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 space-y-6">
-                <div className="bg-[#12121a]/50 backdrop-blur-xl border border-gray-800/50 rounded-xl p-6">
+            <div className="space-y-6">
+              <div className="space-y-6">
+                <div className="bg-[#12121a]/50 backdrop-blur-xl border border-gray-800/50 rounded-xl p-4 md:p-6">
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center space-x-2">
                       <span
@@ -621,16 +618,9 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                     </div>
 
                     <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => setShowAnalysis((prev) => !prev)}
-                        className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
-                          showAnalysis
-                            ? 'bg-indigo-500 text-white'
-                            : 'bg-gray-800 text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        {showAnalysis ? 'Analysis On' : 'Show Analysis'}
-                      </button>
+                      <span className="px-3 py-1 rounded-lg text-sm font-medium bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">
+                        Analysis On
+                      </span>
 
                       {timeframes.map((tf) => (
                         <button
@@ -657,19 +647,14 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                     indicators={indicators}
                     showEMA={hasIndicator('ema')}
                     showBollinger={hasIndicator('bollinger')}
+                    showRSI={hasIndicator('rsi')}
+                    showMACD={hasIndicator('macd')}
                   />
                 </div>
-
-                {(hasIndicator('rsi') || hasIndicator('macd')) && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {hasIndicator('rsi') && <RSIPanel indicators={indicators} />}
-                    {hasIndicator('macd') && <MACDPanel indicators={indicators} />}
-                  </div>
-                )}
               </div>
 
               <div className="space-y-6">
-                {showAnalysis && analysisData && (
+                {analysisData && (
                   <div className="space-y-5">
                     <div className={`${analysisCardClass} p-4`}>
                       <div className="grid grid-cols-3 gap-2 text-xs">
@@ -943,9 +928,15 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                   </div>
                 )}
 
-                {!showAnalysis && (
+                {isAnalysisLoading && (
                   <div className="bg-[#12121a]/50 backdrop-blur-xl border border-gray-800/50 rounded-xl p-6 text-sm text-gray-400">
-                    Enable <span className="text-white font-medium">Show Analysis</span> to fetch trend and trade guidance.
+                    Loading analysis...
+                  </div>
+                )}
+
+                {!isAnalysisLoading && !analysisData && (
+                  <div className="bg-[#12121a]/50 backdrop-blur-xl border border-gray-800/50 rounded-xl p-6 text-sm text-gray-400">
+                    Analysis is currently unavailable for this symbol/timeframe.
                   </div>
                 )}
               </div>
