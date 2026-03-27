@@ -65,6 +65,34 @@ export const TradeListPanel = ({
     }
   }, [selectedTradeId]);
 
+  useEffect(() => {
+    const handleKeyNavigation = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+
+      const target = event.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (!displayedTrades.length) return;
+
+      event.preventDefault();
+
+      const currentIndex = displayedTrades.findIndex((trade) => trade.id === selectedTradeId);
+      const nextIndex =
+        currentIndex === -1
+          ? 0
+          : event.key === 'ArrowDown'
+          ? Math.min(currentIndex + 1, displayedTrades.length - 1)
+          : Math.max(currentIndex - 1, 0);
+
+      const nextTrade = displayedTrades[nextIndex];
+      if (nextTrade) {
+        onSelectTrade(nextTrade.id);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyNavigation);
+    return () => window.removeEventListener('keydown', handleKeyNavigation);
+  }, [displayedTrades, onSelectTrade, selectedTradeId]);
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc((v) => !v);
     else { setSortKey(key); setSortAsc(false); }
@@ -79,6 +107,9 @@ export const TradeListPanel = ({
 
   const winCount = trades.filter((t) => t.pnl >= 0).length;
   const lossCount = trades.filter((t) => t.pnl < 0).length;
+  const totalPnl = trades.reduce((sum, trade) => sum + trade.pnl, 0);
+  const bestTrade = trades.length ? Math.max(...trades.map((trade) => trade.pnl)) : 0;
+  const worstTrade = trades.length ? Math.min(...trades.map((trade) => trade.pnl)) : 0;
 
   return (
     <div className="flex flex-col h-full bg-[#12121a]/60 border border-gray-800/50 rounded-xl overflow-hidden">
@@ -91,6 +122,18 @@ export const TradeListPanel = ({
             <span className="text-gray-600">/</span>
             <span className="text-red-400">{lossCount}L</span>
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mb-2">
+          <span className={`text-[11px] px-2 py-1 rounded-full border ${totalPnl >= 0 ? 'text-green-300 bg-green-500/10 border-green-500/30' : 'text-red-300 bg-red-500/10 border-red-500/30'}`}>
+            Total PnL: {formatPrice(totalPnl)}
+          </span>
+          <span className="text-[11px] px-2 py-1 rounded-full border text-green-300 bg-green-500/10 border-green-500/30">
+            Best: {formatPrice(bestTrade)}
+          </span>
+          <span className="text-[11px] px-2 py-1 rounded-full border text-red-300 bg-red-500/10 border-red-500/30">
+            Worst: {formatPrice(worstTrade)}
+          </span>
         </div>
 
         {/* Filters */}

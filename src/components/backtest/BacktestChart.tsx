@@ -12,7 +12,7 @@ import {
   IPriceLine,
 } from 'lightweight-charts';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, differenceInMinutes } from 'date-fns';
+import { differenceInMinutes } from 'date-fns';
 import type { Candle, Indicators, BacktestTrade } from '../../services/api';
 import { formatPrice } from '../../utils/formatters';
 
@@ -22,6 +22,18 @@ interface TradeBox {
   y1: number;
   x2: number;
   y2: number;
+}
+
+interface TradeLane {
+  id: string;
+  xStart: number;
+  xEnd: number;
+  yEntry: number;
+  yStop: number;
+  yTarget: number;
+  isWin: boolean;
+  isSelected: boolean;
+  tradeType: BacktestTrade['tradeType'];
 }
 
 interface TooltipState {
@@ -42,6 +54,8 @@ interface BacktestChartProps {
 
 const toUTC = (d: string | number | Date): UTCTimestamp =>
   (new Date(d).getTime() / 1000) as UTCTimestamp;
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 export const BacktestChart = ({
   candles,
@@ -100,6 +114,7 @@ export const BacktestChart = ({
     const selectedId = selectedIdRef.current;
     const hoveredId = hoveredIdRef.current;
     const boxes: TradeBox[] = [];
+    const lanes: TradeLane[] = [];
 
     for (const trade of currentTrades) {
       const x1 = chart.timeScale().timeToCoordinate(toUTC(trade.entryTime));
@@ -114,6 +129,9 @@ export const BacktestChart = ({
       const isSelected = trade.id === selectedId;
       const isHovered = trade.id === hoveredId;
       const isWin = trade.pnl >= 0;
+      const entryY = series.priceToCoordinate(trade.entryPrice);
+      const slY = series.priceToCoordinate(trade.stopLoss);
+      const targetY = series.priceToCoordinate(trade.target);
 
       const rectX = Math.min(x1, x2);
       const rectY = Math.min(y1, y2);
@@ -122,7 +140,21 @@ export const BacktestChart = ({
 
       boxes.push({ id: trade.id, x1: rectX, y1: rectY, x2: rectX + rectW, y2: rectY + rectH });
 
-      const alpha = isSelected ? 0.28 : isHovered ? 0.22 : 0.1;
+      if (entryY !== null && slY !== null && targetY !== null) {
+        lanes.push({
+          id: trade.id,
+          xStart: x1,
+          xEnd: x2,
+          yEntry: entryY,
+          yStop: slY,
+          yTarget: targetY,
+          isWin,
+          isSelected,
+          tradeType: trade.tradeType,
+        });
+      }
+
+      const alpha = isSelected ? 0.18 : isHovered ? 0.1 : 0.06;
       const strokeAlpha = isSelected ? 0.8 : isHovered ? 0.6 : 0.3;
 
       ctx.fillStyle = isWin
@@ -136,17 +168,69 @@ export const BacktestChart = ({
       ctx.lineWidth = isSelected ? 1.5 : 1;
       ctx.strokeRect(rectX, rectY, rectW, rectH);
 
-      const entryY = series.priceToCoordinate(trade.entryPrice);
-      if (entryY !== null && entryY >= rectY && entryY <= rectY + rectH) {
+      if (slY !== null) {
         ctx.beginPath();
-        ctx.moveTo(rectX, entryY);
-        ctx.lineTo(rectX + rectW, entryY);
-        ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)';
+        ctx.moveTo(rectX, slY);
+        ctx.lineTo(rectX + rectW, slY);
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
         ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
+        ctx.setLineDash([5, 4]);
         ctx.stroke();
         ctx.setLineDash([]);
       }
+
+      if (targetY !== null) {
+        ctx.beginPath();
+        ctx.moveTo(rectX, targetY);
+        ctx.lineTo(rectX + rectW, targetY);
+        ctx.strokeStyle = 'rgba(34, 197, 94, 0.85)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    // Draw swim lanes after boxes so they stay visible on top.
+    for (const lane of lanes) {
+      const lineColor = lane.tradeType === 'LONG' ? 'rgba(99, 102, 241, 0.95)' : 'rgba(249, 115, 22, 0.95)';
+      const direction = lane.xEnd >= lane.xStart ? 1 : -1;
+
+      ctx.beginPath();
+      ctx.moveTo(lane.xStart, lane.yEntry);
+      ctx.lineTo(lane.xEnd, lane.yEntry);
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = lane.isSelected ? 1.8 : 1.25;
+      ctx.stroke();
+
+      const arrowSize = 6;
+      ctx.beginPath();
+      ctx.moveTo(lane.xEnd, lane.yEntry);
+      ctx.lineTo(lane.xEnd - direction * arrowSize, lane.yEntry - arrowSize / 2);
+      ctx.lineTo(lane.xEnd - direction * arrowSize, lane.yEntry + arrowSize / 2);
+      ctx.closePath();
+      ctx.fillStyle = lineColor;
+      ctx.fill();
+
+      const markerSize = 7;
+      ctx.beginPath();
+      if (lane.tradeType === 'LONG') {
+        ctx.moveTo(lane.xStart, lane.yEntry - markerSize);
+        ctx.lineTo(lane.xStart - markerSize * 0.7, lane.yEntry + markerSize * 0.7);
+        ctx.lineTo(lane.xStart + markerSize * 0.7, lane.yEntry + markerSize * 0.7);
+      } else {
+        ctx.moveTo(lane.xStart, lane.yEntry + markerSize);
+        ctx.lineTo(lane.xStart - markerSize * 0.7, lane.yEntry - markerSize * 0.7);
+        ctx.lineTo(lane.xStart + markerSize * 0.7, lane.yEntry - markerSize * 0.7);
+      }
+      ctx.closePath();
+      ctx.fillStyle = lane.tradeType === 'LONG' ? '#22c55e' : '#ef4444';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(lane.xEnd, lane.yEntry, 4.2, 0, Math.PI * 2);
+      ctx.fillStyle = lane.isWin ? '#22c55e' : '#ef4444';
+      ctx.fill();
     }
 
     tradeBoxesRef.current = boxes;
@@ -340,7 +424,7 @@ export const BacktestChart = ({
           position: (trade.tradeType === 'LONG' ? 'aboveBar' : 'belowBar') as
             | 'belowBar'
             | 'aboveBar',
-          color: trade.pnl >= 0 ? '#06b6d4' : '#6b7280',
+          color: trade.pnl >= 0 ? '#22c55e' : '#ef4444',
           shape: 'circle' as const,
           text: '',
           size: 1,
@@ -366,7 +450,7 @@ export const BacktestChart = ({
     const entryLine = series.createPriceLine({
       price: trade.entryPrice,
       color: '#6366f1',
-      lineWidth: 1,
+      lineWidth: 1.5,
       lineStyle: 0,
       axisLabelVisible: true,
       title: 'Entry',
@@ -401,6 +485,16 @@ export const BacktestChart = ({
     });
   }, [selectedTradeId, trades]);
 
+  const winCount = trades.filter((trade) => trade.pnl >= 0).length;
+  const lossCount = trades.length - winCount;
+
+  const tooltipLeft = tooltip
+    ? clamp(tooltip.x + 14, 8, Math.max(8, (containerRef.current?.clientWidth ?? 0) - 236))
+    : 0;
+  const tooltipTop = tooltip
+    ? clamp(tooltip.y - 10, 8, Math.max(8, (containerRef.current?.clientHeight ?? 0) - 220))
+    : 0;
+
   return (
     <div className="relative bg-[#0a0a0f] rounded-xl overflow-hidden border border-gray-800/50">
       <div ref={containerRef} className="relative w-full" style={{ cursor: 'crosshair' }}>
@@ -426,8 +520,8 @@ export const BacktestChart = ({
             transition={{ duration: 0.1 }}
             style={{
               position: 'absolute',
-              left: tooltip.x + 14,
-              top: tooltip.y - 10,
+              left: tooltipLeft,
+              top: tooltipTop,
               zIndex: 50,
               pointerEvents: 'none',
             }}
@@ -451,6 +545,12 @@ export const BacktestChart = ({
             <div className="w-4 border-t border-indigo-400/60 border-dashed" />
             <span className="text-xs text-gray-400">Entry</span>
           </div>
+        </div>
+      )}
+
+      {trades.length > 0 && (
+        <div className="absolute top-3 right-3 z-20 pointer-events-none rounded-full border border-gray-700/70 bg-[#12121a]/90 px-3 py-1 text-xs text-gray-200">
+          {trades.length} trades | {winCount} wins | {lossCount} losses
         </div>
       )}
     </div>

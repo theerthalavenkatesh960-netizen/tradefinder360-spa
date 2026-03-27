@@ -1,3 +1,4 @@
+import type { ElementType, ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
   BarChart2,
@@ -14,16 +15,23 @@ interface Props {
   metrics: BacktestMetrics;
 }
 
+type ExtendedMetrics = BacktestMetrics & {
+  sharpeRatio?: number;
+  avgTradeDurationMinutes?: number;
+  expectancy?: number;
+};
+
 interface MetricCardProps {
   label: string;
   value: string | number;
-  sub?: React.ReactNode;
-  icon: React.ElementType;
+  sub?: ReactNode;
+  icon: ElementType;
   iconClass: string;
   delay: number;
+  valueClassName?: string;
 }
 
-const MetricCard = ({ label, value, sub, icon: Icon, iconClass, delay }: MetricCardProps) => (
+const MetricCard = ({ label, value, sub, icon: Icon, iconClass, delay, valueClassName = 'text-white' }: MetricCardProps) => (
   <motion.div
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
@@ -36,17 +44,42 @@ const MetricCard = ({ label, value, sub, icon: Icon, iconClass, delay }: MetricC
         <Icon className="w-3.5 h-3.5" />
       </div>
     </div>
-    <p className="text-xl font-bold text-white leading-tight">{value}</p>
+    <p className={`text-xl font-bold leading-tight ${valueClassName}`}>{value}</p>
     {sub && <div className="mt-1">{sub}</div>}
   </motion.div>
 );
 
 export const BacktestMetricsBar = ({ metrics }: Props) => {
+  const extMetrics = metrics as ExtendedMetrics;
   const winRatePct = (metrics.winRate * 100).toFixed(1);
   const isProfitable = metrics.totalPnl >= 0;
 
+  const formatDuration = (minutes?: number) => {
+    if (minutes === undefined || Number.isNaN(minutes)) return '—';
+    const totalMinutes = Math.max(Math.round(minutes), 0);
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return `${hours}h ${mins}m`;
+  };
+
+  const sharpeClass =
+    extMetrics.sharpeRatio === undefined
+      ? 'text-gray-300'
+      : extMetrics.sharpeRatio > 1
+      ? 'text-green-400'
+      : extMetrics.sharpeRatio >= 0.5
+      ? 'text-amber-400'
+      : 'text-red-400';
+
+  const expectancyClass =
+    extMetrics.expectancy === undefined
+      ? 'text-gray-300'
+      : extMetrics.expectancy >= 0
+      ? 'text-green-400'
+      : 'text-red-400';
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+    <div className="grid grid-cols-3 gap-3 mb-4">
       <MetricCard
         label="Total Trades"
         value={metrics.totalTrades}
@@ -120,6 +153,35 @@ export const BacktestMetricsBar = ({ metrics }: Props) => {
         icon={DollarSign}
         iconClass="bg-yellow-500/10 text-yellow-400"
         delay={0.25}
+      />
+
+      <MetricCard
+        label="Sharpe Ratio"
+        value={extMetrics.sharpeRatio !== undefined ? extMetrics.sharpeRatio.toFixed(2) : '—'}
+        valueClassName={sharpeClass}
+        sub={<p className="text-xs text-gray-500">risk-adjusted</p>}
+        icon={Activity}
+        iconClass="bg-cyan-500/10 text-cyan-400"
+        delay={0.3}
+      />
+
+      <MetricCard
+        label="Avg Trade Duration"
+        value={formatDuration(extMetrics.avgTradeDurationMinutes)}
+        sub={<p className="text-xs text-gray-500">per trade</p>}
+        icon={BarChart2}
+        iconClass="bg-violet-500/10 text-violet-400"
+        delay={0.35}
+      />
+
+      <MetricCard
+        label="Expectancy"
+        value={extMetrics.expectancy !== undefined ? formatPrice(extMetrics.expectancy) : '—'}
+        valueClassName={expectancyClass}
+        sub={<p className="text-xs text-gray-500">per trade avg</p>}
+        icon={Target}
+        iconClass="bg-indigo-500/10 text-indigo-400"
+        delay={0.4}
       />
     </div>
   );
