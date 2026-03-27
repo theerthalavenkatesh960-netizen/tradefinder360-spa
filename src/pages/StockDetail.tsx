@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Star, BarChart2, FlaskConical } from 'lucide-react';
@@ -22,6 +22,7 @@ type Tab = 'analysis' | 'backtest';
 export const StockDetail = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const [timeframe, setTimeframe] = useState(15);
+  const [hasChangedTimeframe, setHasChangedTimeframe] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const [backtestRequest, setBacktestRequest] = useState<BacktestRequest | null>(null);
 
@@ -35,21 +36,34 @@ export const StockDetail = () => {
     enabled: !!symbol,
   });
 
-const { data: candles = [] } = useQuery({
-  queryKey: ['candles', symbol, timeframe],
-  queryFn: async () => {
-    const res = await api.candles.get(symbol!, timeframe);
-
-    // ✅ normalize response
+  const normalizeCandleResponse = (res: unknown) => {
     if (Array.isArray(res)) return res;
     if (Array.isArray((res as any)?.data)) return (res as any).data;
     if (Array.isArray((res as any)?.candles)) return (res as any).candles;
-
-    console.error('Invalid candles response:', res);
     return [];
-  },
-  enabled: !!symbol,
-});
+  };
+
+  const instrumentCandles = useMemo(() => {
+    if (!stock) return [];
+    return normalizeCandleResponse((stock as any).candles);
+  }, [stock]);
+
+  const shouldFetchCandles = !!symbol && (hasChangedTimeframe || instrumentCandles.length === 0);
+
+  const { data: fetchedCandles = [] } = useQuery({
+    queryKey: ['candles', symbol, timeframe],
+    queryFn: async () => {
+      const res = await api.candles.get(symbol!, timeframe);
+      const normalized = normalizeCandleResponse(res);
+      if (!normalized.length) {
+        console.error('Invalid candles response:', res);
+      }
+      return normalized;
+    },
+    enabled: shouldFetchCandles,
+  });
+
+  const candles = shouldFetchCandles ? fetchedCandles : instrumentCandles;
 
   const { data: analysis } = useQuery({
     queryKey: ['analysis', symbol, timeframe],
@@ -172,7 +186,12 @@ const { data: candles = [] } = useQuery({
                       {timeframes.map((tf) => (
                         <button
                           key={tf.value}
-                          onClick={() => setTimeframe(tf.value)}
+                          onClick={() => {
+                            if (tf.value !== timeframe) {
+                              setHasChangedTimeframe(true);
+                              setTimeframe(tf.value);
+                            }
+                          }}
                           className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
                             timeframe === tf.value
                               ? 'bg-indigo-500 text-white'

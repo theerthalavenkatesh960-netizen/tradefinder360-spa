@@ -288,9 +288,9 @@ export const api = {
   },
 
   candles: {
-    get: async (symbol: string, timeframe = 15, daysBack = 30): Promise<Candle[]> => {
+    get: async (symbol: string, timeframe = 15): Promise<Candle[]> => {
       const response = await fetch(
-        `${API_BASE_URL}/candles/${symbol}?timeframe=${timeframe}&daysBack=${daysBack}`,
+        `${API_BASE_URL}/candles/${symbol}?timeframe=${timeframe}`,
         { headers: getHeaders() }
       );
       if (!response.ok) throw new Error('Failed to fetch candles');
