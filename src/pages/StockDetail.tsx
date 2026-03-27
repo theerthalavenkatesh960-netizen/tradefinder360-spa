@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ElementType } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Star, BarChart2, FlaskConical } from 'lucide-react';
+import { ArrowLeft, Star, BarChart2, FlaskConical, Check, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../services/api';
-import type { BacktestRequest } from '../services/api';
+import type { BacktestRequest, Candle } from '../services/api';
 import { useWatchlistStore } from '../store/watchlist';
 import { useBacktestStore } from '../store/backtest';
 import { CandleChart } from '../components/CandleChart';
@@ -18,13 +18,97 @@ import { EquityCurve } from '../components/backtest/EquityCurve';
 import { formatPrice, formatPercent, getSignalColor, getTrendStateColor } from '../utils/formatters';
 
 type Tab = 'analysis' | 'backtest';
+type IndicatorKey = 'ema' | 'bollinger' | 'rsi' | 'macd';
+
+const CANDLE_CACHE_KEY = 'tradefinder360:candles:v1';
+const MAX_CACHED_INSTRUMENTS = 5;
+
+type CandleCacheRecord = {
+  order: string[];
+  entries: Record<
+    string,
+    {
+      updatedAt: number;
+      timeframes: Record<string, Candle[]>;
+    }
+  >;
+};
+
+const getDefaultCandleCache = (): CandleCacheRecord => ({
+  order: [],
+  entries: {},
+});
+
+const readCandleCache = (): CandleCacheRecord => {
+  if (typeof window === 'undefined') return getDefaultCandleCache();
+
+  try {
+    const raw = window.localStorage.getItem(CANDLE_CACHE_KEY);
+    if (!raw) return getDefaultCandleCache();
+
+    const parsed = JSON.parse(raw) as CandleCacheRecord;
+    if (!parsed?.entries || !Array.isArray(parsed.order)) {
+      return getDefaultCandleCache();
+    }
+
+    return parsed;
+  } catch {
+    return getDefaultCandleCache();
+  }
+};
+
+const writeCandleCache = (cache: CandleCacheRecord) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(CANDLE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // Ignore quota/storage errors to avoid breaking chart rendering.
+  }
+};
+
+const getCachedCandles = (symbol: string, timeframe: number): Candle[] => {
+  const cache = readCandleCache();
+  return cache.entries[symbol]?.timeframes?.[String(timeframe)] ?? [];
+};
+
+const setCachedCandles = (symbol: string, timeframe: number, candles: Candle[]) => {
+  if (!candles.length) return;
+
+  const cache = readCandleCache();
+  const existing = cache.entries[symbol] ?? { updatedAt: Date.now(), timeframes: {} };
+
+  cache.entries[symbol] = {
+    ...existing,
+    updatedAt: Date.now(),
+    timeframes: {
+      ...existing.timeframes,
+      [String(timeframe)]: candles,
+    },
+  };
+
+  cache.order = [symbol, ...cache.order.filter((s) => s !== symbol)];
+
+  while (cache.order.length > MAX_CACHED_INSTRUMENTS) {
+    const evicted = cache.order.pop();
+    if (evicted) {
+      delete cache.entries[evicted];
+    }
+  }
+
+  writeCandleCache(cache);
+};
 
 export const StockDetail = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const [timeframe, setTimeframe] = useState(15);
   const [hasChangedTimeframe, setHasChangedTimeframe] = useState(false);
+  const [isIndicatorMenuOpen, setIsIndicatorMenuOpen] = useState(false);
+  const [selectedIndicators, setSelectedIndicators] = useState<IndicatorKey[]>([]);
+  const [showAnalysis, setShowAnalysis] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const [backtestRequest, setBacktestRequest] = useState<BacktestRequest | null>(null);
+  const indicatorMenuRef = useRef<HTMLDivElement>(null);
 
   const { toggle, isWatched } = useWatchlistStore();
   const { selectedTradeId, hoveredTradeId, setSelectedTrade, setHoveredTrade } =
@@ -34,21 +118,31 @@ export const StockDetail = () => {
     queryKey: ['stock', symbol],
     queryFn: () => api.instruments.getDetail(symbol!),
     enabled: !!symbol,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
-  const normalizeCandleResponse = (res: unknown) => {
-    if (Array.isArray(res)) return res;
-    if (Array.isArray((res as any)?.data)) return (res as any).data;
-    if (Array.isArray((res as any)?.candles)) return (res as any).candles;
+  const normalizeCandleResponse = (res: unknown): Candle[] => {
+    if (Array.isArray(res)) return res as Candle[];
+    if (Array.isArray((res as any)?.data)) return (res as any).data as Candle[];
+    if (Array.isArray((res as any)?.candles)) return (res as any).candles as Candle[];
     return [];
   };
 
   const instrumentCandles = useMemo(() => {
     if (!stock) return [];
-    return normalizeCandleResponse((stock as any).candles);
+    return normalizeCandleResponse(stock.candles);
   }, [stock]);
 
-  const shouldFetchCandles = !!symbol && (hasChangedTimeframe || instrumentCandles.length === 0);
+  const cachedCandles = useMemo(() => {
+    if (!symbol) return [];
+    return getCachedCandles(symbol, timeframe);
+  }, [symbol, timeframe]);
+
+  const shouldFetchCandles =
+    !!symbol && !cachedCandles.length && (hasChangedTimeframe || instrumentCandles.length === 0);
 
   const { data: fetchedCandles = [] } = useQuery({
     queryKey: ['candles', symbol, timeframe],
@@ -61,20 +155,66 @@ export const StockDetail = () => {
       return normalized;
     },
     enabled: shouldFetchCandles,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    retry: 1,
   });
 
-  const candles = shouldFetchCandles ? fetchedCandles : instrumentCandles;
+  const candleSource: 'cache' | 'instrument' | 'api' | 'empty' = useMemo(() => {
+    if (cachedCandles.length) return 'cache';
+    if (!hasChangedTimeframe && instrumentCandles.length) return 'instrument';
+    if (fetchedCandles.length) return 'api';
+    return 'empty';
+  }, [cachedCandles, fetchedCandles, hasChangedTimeframe, instrumentCandles]);
+
+  const candleSourceStyle: Record<typeof candleSource, string> = {
+    cache: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+    instrument: 'text-sky-300 border-sky-500/30 bg-sky-500/10',
+    api: 'text-amber-300 border-amber-500/30 bg-amber-500/10',
+    empty: 'text-gray-300 border-gray-600 bg-gray-800/60',
+  };
+
+  const candles = useMemo(() => {
+    if (cachedCandles.length) return cachedCandles;
+    if (!hasChangedTimeframe && instrumentCandles.length) return instrumentCandles;
+    return fetchedCandles;
+  }, [cachedCandles, fetchedCandles, hasChangedTimeframe, instrumentCandles]);
+
+  useEffect(() => {
+    if (!symbol || !instrumentCandles.length || hasChangedTimeframe) return;
+    setCachedCandles(symbol, timeframe, instrumentCandles);
+  }, [symbol, timeframe, instrumentCandles, hasChangedTimeframe]);
+
+  useEffect(() => {
+    if (!symbol || !fetchedCandles.length) return;
+    setCachedCandles(symbol, timeframe, fetchedCandles);
+  }, [symbol, timeframe, fetchedCandles]);
+
+  const shouldFetchIndicators =
+    !!symbol &&
+    activeTab === 'analysis' &&
+    selectedIndicators.length > 0;
 
   const { data: analysis } = useQuery({
     queryKey: ['analysis', symbol, timeframe],
     queryFn: () => api.instruments.getAnalysis(symbol!, timeframe),
-    enabled: !!symbol,
+    enabled: !!symbol && activeTab === 'analysis' && showAnalysis,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const { data: indicators = [] } = useQuery({
     queryKey: ['indicators', symbol, timeframe],
     queryFn: () => api.instruments.getIndicators(symbol!, timeframe),
-    enabled: !!symbol,
+    enabled: shouldFetchIndicators,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   // Backtest query — only runs when a request is submitted
@@ -109,10 +249,39 @@ export const StockDetail = () => {
     setBacktestRequest(req);
   };
 
-  const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+  const TABS: { id: Tab; label: string; icon: ElementType }[] = [
     { id: 'analysis', label: 'Chart Analysis', icon: BarChart2 },
     { id: 'backtest', label: 'Backtesting', icon: FlaskConical },
   ];
+
+  const indicatorOptions: Array<{ key: IndicatorKey; label: string }> = [
+    { key: 'ema', label: 'EMA' },
+    { key: 'bollinger', label: 'Bollinger Bands' },
+    { key: 'rsi', label: 'RSI Panel' },
+    { key: 'macd', label: 'MACD Panel' },
+  ];
+
+  const toggleIndicator = (key: IndicatorKey) => {
+    setSelectedIndicators((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+    );
+  };
+
+  const hasIndicator = (key: IndicatorKey) => selectedIndicators.includes(key);
+
+  useEffect(() => {
+    if (!isIndicatorMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!indicatorMenuRef.current) return;
+      if (!indicatorMenuRef.current.contains(event.target as Node)) {
+        setIsIndicatorMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [isIndicatorMenuOpen]);
 
   return (
     <div className="max-w-[1600px] mx-auto">
@@ -181,8 +350,57 @@ export const StockDetail = () => {
               <div className="lg:col-span-2 space-y-6">
                 <div className="bg-[#12121a]/50 backdrop-blur-xl border border-gray-800/50 rounded-xl p-6">
                   <div className="flex items-center justify-between mb-6">
-                    <div />
-                    <div className="flex space-x-2">
+                    <div className="flex items-center space-x-2">
+                      <span
+                        className={`text-xs px-2 py-1 rounded-md border ${candleSourceStyle[candleSource]}`}
+                        title="Candles data source"
+                      >
+                        Cache: {candleSource.toUpperCase()}
+                      </span>
+
+                      <div ref={indicatorMenuRef} className="relative">
+                      <button
+                        onClick={() => setIsIndicatorMenuOpen((prev) => !prev)}
+                        className="flex items-center space-x-2 px-3 py-1 rounded-lg text-sm font-medium bg-gray-800 text-gray-300 hover:text-white transition"
+                      >
+                        <span>Indicators</span>
+                        {selectedIndicators.length > 0 && (
+                          <span className="bg-indigo-500 text-white text-xs px-2 py-0.5 rounded-full">
+                            {selectedIndicators.length}
+                          </span>
+                        )}
+                        <ChevronDown className={`w-4 h-4 transition ${isIndicatorMenuOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isIndicatorMenuOpen && (
+                        <div className="absolute z-20 mt-2 w-56 rounded-lg border border-gray-700 bg-[#0f0f16] shadow-xl p-2">
+                          {indicatorOptions.map((option) => (
+                            <button
+                              key={option.key}
+                              onClick={() => toggleIndicator(option.key)}
+                              className="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition"
+                            >
+                              <span>{option.label}</span>
+                              {hasIndicator(option.key) && <Check className="w-4 h-4 text-indigo-400" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setShowAnalysis((prev) => !prev)}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
+                          showAnalysis
+                            ? 'bg-indigo-500 text-white'
+                            : 'bg-gray-800 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {showAnalysis ? 'Analysis On' : 'Show Analysis'}
+                      </button>
+
                       {timeframes.map((tf) => (
                         <button
                           key={tf.value}
@@ -203,17 +421,24 @@ export const StockDetail = () => {
                       ))}
                     </div>
                   </div>
-                  <CandleChart candles={candles} indicators={indicators} />
+                  <CandleChart
+                    candles={candles}
+                    indicators={indicators}
+                    showEMA={hasIndicator('ema')}
+                    showBollinger={hasIndicator('bollinger')}
+                  />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <RSIPanel indicators={indicators} />
-                  <MACDPanel indicators={indicators} />
-                </div>
+                {(hasIndicator('rsi') || hasIndicator('macd')) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {hasIndicator('rsi') && <RSIPanel indicators={indicators} />}
+                    {hasIndicator('macd') && <MACDPanel indicators={indicators} />}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-6">
-                {analysis && (
+                {showAnalysis && analysis && (
                   <div className="bg-[#12121a]/50 backdrop-blur-xl border border-gray-800/50 rounded-xl p-6">
                     <h3 className="text-lg font-bold mb-4">Analysis</h3>
                     <div className="space-y-4">
@@ -261,6 +486,12 @@ export const StockDetail = () => {
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {!showAnalysis && (
+                  <div className="bg-[#12121a]/50 backdrop-blur-xl border border-gray-800/50 rounded-xl p-6 text-sm text-gray-400">
+                    Enable <span className="text-white font-medium">Show Analysis</span> to fetch trend and trade guidance.
                   </div>
                 )}
               </div>

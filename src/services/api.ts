@@ -20,6 +20,7 @@ export interface Stock {
   state: string;
   setupScore: number;
   qualityLabel: 'HIGH' | 'WATCHLIST' | string;
+  candles?: Candle[];
 }
 
 export interface Candle {
