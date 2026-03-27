@@ -13,7 +13,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { differenceInMinutes } from 'date-fns';
 import type { Candle, Indicators, BacktestTrade } from '../../services/api';
-import { formatPrice } from '../../utils/formatters';
+import { formatPrice, formatUTCToIST } from '../../utils/formatters';
 
 interface TradeBox {
   id: string;
@@ -362,6 +362,9 @@ export const BacktestChart = ({
         borderColor: '#374151',
       },
       rightPriceScale: { borderColor: '#374151' },
+      localization: {
+        timeFormatter: (utcTimestamp: number) => formatUTCToIST(utcTimestamp),
+      } as any,
       crosshair: {
         vertLine: { color: '#6366f1', width: 1, style: 3 },
         horzLine: { color: '#6366f1', width: 1, style: 3 },
