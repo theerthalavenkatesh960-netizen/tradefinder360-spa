@@ -547,21 +547,44 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
       </div>
 
       {/* Tab Switcher */}
-      <div className="flex space-x-1 bg-[#12121a]/60 border border-gray-800/50 rounded-xl p-1 mb-5 w-fit">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setActiveTab(id)}
-            className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-sm font-medium transition ${
-              activeTab === id
-                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            <Icon className="w-4 h-4" />
-            <span>{label}</span>
-          </button>
-        ))}
+      <div className="flex items-center justify-between mb-5 gap-4">
+        <div className="flex space-x-1 bg-[#12121a]/60 border border-gray-800/50 rounded-xl p-1 w-fit">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-sm font-medium transition ${
+                activeTab === id
+                  ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {analysisData && activeTab === 'analysis' && (
+          <div className="flex-1 bg-gradient-to-r from-[#12121a]/75 to-[#0f1017]/70 backdrop-blur-xl border border-gray-800/60 rounded-lg p-3 flex items-center justify-around gap-4">
+            <div className="flex flex-col items-center">
+              <p className="text-gray-500 text-xs mb-1">Trend</p>
+              <p className="text-gray-100 font-semibold text-sm">{trendDisplayState.replace('_', ' ')}</p>
+            </div>
+            <div className="w-px h-8 bg-gray-700/40"></div>
+            <div className="flex flex-col items-center">
+              <p className="text-gray-500 text-xs mb-1">Signal Score</p>
+              <p className="font-semibold text-sm" style={{ color: ringHue }}>{signalStrength.toFixed(1)} / 10</p>
+            </div>
+            <div className="w-px h-8 bg-gray-700/40"></div>
+            <div className="flex flex-col items-center">
+              <p className="text-gray-500 text-xs mb-1">Bias</p>
+              <p className={`font-semibold text-sm ${biasDirection === 'LONG' ? 'text-green-300' : biasDirection === 'SHORT' ? 'text-red-300' : 'text-gray-300'}`}>
+                {biasDirection}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <AnimatePresence mode="wait">
@@ -656,25 +679,6 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
               <div className="space-y-6">
                 {analysisData && (
                   <div className="grid grid-cols-3 gap-5">
-                    <div className={`${analysisCardClass} p-4`}>
-                      <div className="grid grid-cols-3 gap-2 text-xs">
-                        <div className="rounded-lg border border-gray-700/50 bg-[#0a0a0f]/60 px-2 py-2">
-                          <p className="text-gray-500 mb-0.5">Trend</p>
-                          <p className="text-gray-100 font-semibold leading-tight">{trendDisplayState.replace('_', ' ')}</p>
-                        </div>
-                        <div className="rounded-lg border border-gray-700/50 bg-[#0a0a0f]/60 px-2 py-2">
-                          <p className="text-gray-500 mb-0.5">Signal Score</p>
-                          <p className="font-semibold" style={{ color: ringHue }}>{signalStrength.toFixed(1)} / 10</p>
-                        </div>
-                        <div className="rounded-lg border border-gray-700/50 bg-[#0a0a0f]/60 px-2 py-2">
-                          <p className="text-gray-500 mb-0.5">Bias</p>
-                          <p className={`font-semibold ${biasDirection === 'LONG' ? 'text-green-300' : biasDirection === 'SHORT' ? 'text-red-300' : 'text-gray-300'}`}>
-                            {biasDirection}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
                     <div className={analysisCardClass}>
                       <h3 className={analysisTitleClass}>Trend Summary</h3>
                       <div className="space-y-3">
