@@ -1,242 +1,111 @@
-You are a senior frontend + backend architect and quantitative trading engineer.
+I have a stock analysis and backtesting app built with React, TypeScript, Tailwind CSS, and lightweight-charts v5. I want to make two major improvements. Here are all the files for context: [paste all your files — StockDetail.tsx, CandleChart.tsx, BacktestChart.tsx, BacktestControls.tsx, BacktestMetrics.tsx, EquityCurve.tsx, TradeListPanel.tsx]
 
-Enhance my existing project:
-GitHub Repo: https://github.com/theerthalavenkatesh960-netizen/tradefinder360-spa
+Fix 1 — React hooks error in StockDetail.tsx
+The component throws Rendered more hooks than during the previous render because there is an early return if (!stock) { return <spinner /> } that sits between hooks. Fix this by splitting into two components in the same file:
 
-Goal:
-Build a **professional-grade backtesting engine + trade visualization system** on the Stock Detail Page.
+StockDetail (exported, outer wrapper) — contains only useParams and the single useQuery for stock. Shows spinner if !stock, otherwise renders <StockDetailInner stock={stock} symbol={symbol} />.
+StockDetailInner (inner, not exported) — receives stock and symbol as props. Contains ALL remaining hooks, handlers, and JSX exactly as-is. Do not change any logic, imports, or variable names.
 
-This must feel like **Zerodha Kite / TradingView-level UX**, not a basic implementation.
 
----
+Fix 2 — Make the Analysis panel world-class for trade decision making
+Enhance the right-side analysis panel in StockDetail (the panel that shows when showAnalysis is true) to include ALL of the following sections. Use the existing analysis and indicators data already fetched. Add new API calls only if the data genuinely doesn't exist in current responses.
+Sections to add:
+A. Trend Summary Card
 
-## 🧠 CORE FEATURES
+Large trend state badge (STRONG_UP / WEAK_UP / SIDEWAYS / WEAK_DOWN / STRONG_DOWN) with color coding
+Setup score progress bar (0–100) with color: green >70, amber 40–70, red <40
+EMA alignment status: show if Fast EMA > Slow EMA (bullish) or Fast < Slow (bearish)
+Price position relative to EMA: above/below both EMAs
 
-### 1. Strategy-Based Backtesting Engine
+B. Entry Guidance Card (only show if direction !== 'NONE')
 
-* Allow user to select a **strategy** (initially support):
+Direction badge (LONG / SHORT) prominently
+Entry price, Stop Loss (red), Target (green) in a clean grid
+R:R ratio displayed as 1 : X.XX
+Risk amount in % if price moves to SL
+A visual mini price ladder showing Entry / SL / Target as horizontal bars proportionally spaced
 
-  * Opening Range Breakout (ORB - 5 min high/low breakout)
-  * RSI-based reversal
-  * Moving Average crossover (EMA 9/21 or 20/50)
+C. Momentum Card
 
-* Strategy should be configurable:
+RSI value with color: green <40 (oversold), red >70 (overbought), grey otherwise
+RSI trend: rising / falling based on last 3 values
+MACD: show if histogram is positive or negative, and if it just crossed
+Volume: current vs 20-period average (above/below average indicator)
 
-  * Timeframe (1m, 5m, 15m)
-  * Risk per trade (%)
-  * Stop loss logic (fixed %, ATR-based, candle low/high)
-  * Target logic (RR ratio like 1:2, trailing SL, etc.)
+D. Key Levels Card
 
-* Backend (.NET service):
+Bollinger Upper, Middle, Lower prices
+Distance from current price to each band in %
+Whether price is outside bands (squeeze signal)
 
-  * Create `BacktestService`
-  * Input:
+E. Signal Strength Summary
 
-    * symbol
-    * date range
-    * strategy config  
+A composite 0–10 score synthesised from: trend alignment + RSI position + MACD direction + price vs EMA
+Show as a large number with a coloured ring around it
+Below it: list which signals are bullish (green check) and which are bearish (red cross)
 
-  * Output:
+Use the existing indicators array (last element = most recent) for all computed values. Keep the dark theme consistent with the rest of the app (#12121a, #0a0a0f, indigo accents).
 
-    * List of trades:
+Fix 3 — Make BacktestChart trade visualization the best possible
+Completely rework how trades are displayed on the BacktestChart. Replace the current box drawing approach with the following:
+Trade visualization requirements:
+A. Entry-to-Exit swim lane
 
-      * entryTime
-      * entryPrice
-      * exitTime
-      * exitPrice
-      * stopLoss
-      * target
-      * quantity
-      * pnl
-      * pnlPercent
-      * tradeType (LONG/SHORT)
+Draw a horizontal arrow/line from entry candle to exit candle at the entry price level
+Color: indigo for LONG, orange for SHORT
+At entry point: draw a filled triangle marker (up for LONG, down for SHORT) in green/red
+At exit point: draw a circle marker colored green (win) or red (loss)
+The line should be on the price axis at the exact entry price, making it easy to follow the trade
 
----
+B. SL and Target bands
 
-## 📊 2. Chart Visualization (CRITICAL UX PART)
+Draw a semi-transparent filled rectangle from entry time to exit time
+Top of rect = Target price, Bottom of rect = Stop Loss price
+Fill color: green tint (rgba 34,197,94, 0.06) for wins, red tint for losses
+Dashed horizontal lines for SL (red dashed) and Target (green dashed) within the rect
 
-Enhance existing chart component:
+C. Selected trade highlight
 
-### Overlay Trades on Candlestick Chart
+When a trade is selected, increase opacity of its rect to 0.18
+Draw the entry price line in bright indigo (solid, 1.5px)
+Add price labels on the right axis: "Entry", "SL", "Target" (already done via price lines — keep this)
+Scroll to center the trade in view (already done — keep this)
 
-* For each trade:
+D. Hovered trade tooltip
 
-  * Show **entry marker**
+Keep existing TradeTooltip component but reposition it to always stay within viewport bounds (clamp left and top so it never goes off-screen)
+Add a "Duration" human-readable label (e.g. "2h 30m")
 
-    * Green arrow ↑ for LONG
-    * Red arrow ↓ for SHORT
-  * Draw:
+E. Trade count badge
 
-    * Entry line
-    * Stop loss line (red)
-    * Target line (green)
+Top-right corner of chart: show "X trades | Y wins | Z losses" as a small pill badge
 
-### Position Box (like Zerodha / TradingView)
+F. Performance
 
-* Render a **shaded rectangle** from:
+Keep the existing RAF + ref pattern for drawBoxes
+After drawing rects, draw the entry-to-exit lines in a second pass so lines always render on top of rects
 
-  * entry → exit (time axis)
-  * stoploss → target (price axis)
-* Color:
 
-  * Green transparent for profitable trades
-  * Red transparent for losing trades
+Fix 4 — Enhance BacktestMetricsBar
+Add these additional metric cards to the existing 6-card grid (extend to 9 cards, wrap to 3 rows on mobile):
 
-### Interactions:
+Sharpe Ratio — metrics.sharpeRatio — show as number, green if >1, amber if 0.5–1, red if <0.5. Sub-label: "risk-adjusted"
+Avg Trade Duration — metrics.avgTradeDurationMinutes — format as "Xh Ym". Sub-label: "per trade"
+Expectancy — metrics.expectancy — formatPrice. Sub-label: "per trade avg". Green if positive.
 
-* Hover on trade:
+If these fields don't exist on BacktestMetrics type yet, add them as optional (sharpeRatio?: number, avgTradeDurationMinutes?: number, expectancy?: number) and show "—" if undefined.
 
-  * Show tooltip:
+Fix 5 — TradeListPanel improvements
 
-    * Entry / Exit
-    * PnL
-    * RR
-    * Duration
-* Click on trade:
+Add a summary stats row at the top below the W/L count: show Total PnL (green/red), Best trade (green), Worst trade (red) as three inline pills
+Add keyboard navigation: when a trade row is selected, pressing ArrowUp/ArrowDown should select the previous/next visible trade in the filtered+sorted list
+The existing scroll-into-view on selection is correct — keep it
 
-  * Highlight the trade
-  * Sync with trade list (scroll to it)
 
----
+General rules for all changes:
 
-## 📋 3. Trade List Panel (Right Side / Bottom Drawer)
-
-* Show all trades in a **professional grid**
-
-* Columns:
-
-  * Date
-  * Trade Type (LONG/SHORT)
-  * Entry / Exit
-  * SL / Target
-  * Quantity
-  * PnL (₹ + %)
-  * RR achieved
-
-* Features:
-
-  * Sort by PnL, Date
-  * Filter (Winning / Losing / Long / Short)
-  * Click row → focus chart on that trade
-
----
-
-## 📈 4. Performance Analytics Dashboard
-
-Above or below chart:
-
-* Total Trades
-* Win Rate
-* Total PnL
-* Max Drawdown
-* Avg RR
-* Equity Curve (line chart)
-* Daily PnL bars
-
----
-
-## ⚡ 5. UI/UX REQUIREMENTS (VERY IMPORTANT)
-
-* Maintain current design system, but upgrade it to **premium trading UI**
-* Use:
-
-  * Smooth animations (Framer Motion)
-  * Clean spacing and typography
-  * Dark mode optimized
-* No clutter — professional minimalism
-
-### Layout:
-
-* Chart = primary focus (70%)
-* Side panel = trades + filters
-* Top bar = strategy selector + config
-
----
-
-## ⚙️ 6. PERFORMANCE
-
-* Handle large datasets efficiently
-* Use:
-
-  * Memoization
-  * Virtualized lists (for trades)
-  * Lazy rendering for chart overlays
-
----
-
-## 🧩 7. FRONTEND IMPLEMENTATION DETAILS
-
-* Extend existing CandleChart:
-
-  * Add overlay layer for trades
-
-* Create components:
-
-  * TradeMarkers
-  * TradeZones (position boxes)
-  * TradeTooltip
-  * TradeListPanel
-  * BacktestControls
-
-* State management:
-
-  * Use React Query for fetching backtest data
-  * Local state or Zustand for UI interactions
-
----
-
-## 🔌 8. API DESIGN
-
-POST /api/backtest
-
-Request:
-{
-symbol: string,
-from: Date,
-to: Date,
-strategy: {
-name: string,
-params: {}
-}
-}
-
-Response:
-{
-trades: [],
-metrics: {
-totalTrades,
-winRate,
-pnl,
-drawdown,
-equityCurve[]
-}
-}
-
----
-
-## 🧪 9. EDGE CASES
-
-* No trades → show empty state UI
-* Sideways market → low signals
-* High volatility → ensure SL/Target rendering correct
-
----
-
-## 🎯 FINAL EXPECTATION
-
-This feature should:
-
-* Feel like a **pro trading terminal**
-* Be visually intuitive (user should “see” trades instantly)
-* Help decision-making, not just display data
-
-Think like:
-Combination of:
-
-* Zerodha Kite
-* TradingView strategy tester
-* Quant dashboard
-
-Deliver production-quality code.
-
-don't build all db tables again think of it ike i already have the api's , just build the ui , if there is already an api being used on something don't change it unless neccessary and also give me the assumed api details at the end, so that i can build them later if not available, i have another api repo
+Preserve all existing functionality exactly
+Keep the dark theme (#0a0a0f, #12121a, #1a1a2e, gray-800 borders, indigo-500 accents)
+No new dependencies — use only what's already imported (framer-motion, lucide-react, lightweight-charts, date-fns)
+TypeScript strict — no any types
+Do not change API service files or store files
