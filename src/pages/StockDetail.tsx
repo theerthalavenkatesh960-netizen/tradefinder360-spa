@@ -105,7 +105,81 @@ interface StockDetailInnerProps {
   symbol: string;
 }
 
-const getTrendDisplayState = (analysis: Analysis): 'STRONG_UP' | 'WEAK_UP' | 'SIDEWAYS' | 'WEAK_DOWN' | 'STRONG_DOWN' => {
+type WhyNoTradeCode =
+  | 'NOT_PULLBACK_READY'
+  | 'LOW_VOLUME'
+  | 'WEAK_TREND'
+  | 'RISK_TOO_HIGH'
+  | 'CONFLICTING_SIGNALS'
+  | 'OUTSIDE_TRADING_WINDOW'
+  | 'OTHER';
+
+interface ExtendedEntryGuidance {
+  direction: 'BUY' | 'SELL' | 'NONE';
+  entryPrice: number;
+  stopLoss: number;
+  target: number;
+  riskRewardRatio: number;
+  optionType?: 'CE' | 'PE';
+  optionStrike?: number;
+  confidenceBreakdown?: {
+    trend: number;
+    momentum: number;
+    volume: number;
+    structure: number;
+    volatility: number;
+    total: number;
+  };
+  expectedHoldingMinutes?: number | null;
+  maxAdverseExcursionPct?: number | null;
+  maxFavorableExcursionPct?: number | null;
+}
+
+type ExtendedAnalysis = Omit<Analysis, 'entryGuidance'> & {
+  entryGuidance: ExtendedEntryGuidance | null;
+  noTradeContext?: {
+    whyNoTradeCode: WhyNoTradeCode;
+    whyNoTradeMessage: string;
+    nextTriggerPrice: number | null;
+    nextTriggerCondition: string | null;
+    estimatedRecheckMinutes: number | null;
+    invalidatesAt: string | null;
+  } | null;
+  volumeContext?: {
+    currentVolume: number;
+    volume20Avg: number;
+    relativeVolume: number;
+    deliveryVolumeRatio: number | null;
+    isAboveAverage: boolean;
+  } | null;
+  structureLevels?: {
+    sessionHigh: number | null;
+    sessionLow: number | null;
+    previousDayHigh: number | null;
+    previousDayLow: number | null;
+    nearestSupport: number | null;
+    nearestResistance: number | null;
+    pivot: number | null;
+    r1: number | null;
+    s1: number | null;
+  } | null;
+  signalTiming?: {
+    signalAgeBars: number | null;
+    barsSinceMacdCross: number | null;
+    barsSinceRsiZoneExit: number | null;
+    signalFreshnessScore: number;
+  } | null;
+  marketRegime?: {
+    volatilityRegime: 'LOW' | 'NORMAL' | 'HIGH';
+    trendStrengthScore: number;
+    rangeCompressionScore: number;
+    momentumQualityScore: number;
+  } | null;
+};
+
+const getTrendDisplayState = (
+  analysis: { trendState: Analysis['trendState'] }
+): 'STRONG_UP' | 'WEAK_UP' | 'SIDEWAYS' | 'WEAK_DOWN' | 'STRONG_DOWN' => {
   const score = analysis.trendState.setupScore;
   if (analysis.trendState.state === 'TRENDING_BULLISH') {
     return score >= 70 ? 'STRONG_UP' : 'WEAK_UP';
@@ -279,6 +353,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     refetchOnMount: false,
   });
 
+  const analysisData = analysis as ExtendedAnalysis | undefined;
+
   // Backtest query — only runs when a request is submitted
   const {
     data: backtestResult,
@@ -316,19 +392,36 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   ];
 
   const toggleIndicator = (key: IndicatorKey) => {
-    setSelectedIndicators((prev) =>
-      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+    setSelectedIndicators((prev: IndicatorKey[]) =>
+      prev.includes(key) ? prev.filter((item: IndicatorKey) => item !== key) : [...prev, key]
     );
   };
 
   const hasIndicator = (key: IndicatorKey) => selectedIndicators.includes(key);
 
-  const latestIndicator = indicators.length ? indicators[indicators.length - 1] : null;
-  const previousIndicator = indicators.length > 1 ? indicators[indicators.length - 2] : null;
-  const recentRsi = indicators.slice(-3).map((item) => item.rsi);
+  const indicatorSeries = indicators.length
+    ? indicators
+    : analysisData?.indicators
+    ? [analysisData.indicators]
+    : [];
 
-  const trendDisplayState = analysis ? getTrendDisplayState(analysis) : 'SIDEWAYS';
-  const setupScore = analysis?.trendState.setupScore ?? 0;
+  const latestIndicator = indicatorSeries.length ? indicatorSeries[indicatorSeries.length - 1] : null;
+  const previousIndicator = indicatorSeries.length > 1 ? indicatorSeries[indicatorSeries.length - 2] : null;
+  const recentRsi = indicatorSeries.slice(-3).map((item: { rsi: number }) => item.rsi);
+
+  const trendDisplayState = analysisData ? getTrendDisplayState(analysisData) : 'SIDEWAYS';
+  const guidanceDirection = analysisData?.entryGuidance?.direction ?? 'NONE';
+  const biasDirection =
+    guidanceDirection !== 'NONE'
+      ? guidanceDirection === 'BUY'
+        ? 'LONG'
+        : 'SHORT'
+      : analysisData?.trendState.bias === 'BULLISH'
+      ? 'LONG'
+      : analysisData?.trendState.bias === 'BEARISH'
+      ? 'SHORT'
+      : 'NEUTRAL';
+  const setupScore = analysisData?.trendState.setupScore ?? 0;
 
   const latestClose = candles.length ? candles[candles.length - 1].close : stock.lastClose;
   const emaFast = latestIndicator?.emaFast ?? 0;
@@ -367,8 +460,13 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
       : 'Insufficient data';
 
   const currentVolume = candles.length ? candles[candles.length - 1].volume : 0;
-  const avgVolume20 = candles.slice(-20).reduce((acc, c) => acc + c.volume, 0) / Math.max(Math.min(candles.length, 20), 1);
-  const volumeState = currentVolume >= avgVolume20 ? 'Above 20-period avg' : 'Below 20-period avg';
+  const avgVolume20 =
+    candles.slice(-20).reduce((acc: number, candle: Candle) => acc + candle.volume, 0) /
+    Math.max(Math.min(candles.length, 20), 1);
+  const volumeCurrent = analysisData?.volumeContext?.currentVolume ?? currentVolume;
+  const volumeAvg = analysisData?.volumeContext?.volume20Avg ?? avgVolume20;
+  const relativeVolume = analysisData?.volumeContext?.relativeVolume ?? (volumeAvg ? volumeCurrent / volumeAvg : 0);
+  const volumeState = relativeVolume >= 1 ? 'Above 20-period avg' : 'Below 20-period avg';
 
   const bollUpper = latestIndicator?.bollingerUpper ?? latestClose;
   const bollMid = latestIndicator?.bollingerMiddle ?? latestClose;
@@ -382,7 +480,9 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const rsiPoints = rsiValue < 40 ? 2.2 : rsiValue > 70 ? 0.8 : 1.6;
   const macdPoints = macdHistogram > 0 ? 2.2 : 1.0;
   const emaPoints = latestClose > emaFast && latestClose > emaSlow ? 2.1 : latestClose < emaFast && latestClose < emaSlow ? 0.8 : 1.4;
-  const signalStrength = clamp(trendPoints + rsiPoints + macdPoints + emaPoints, 0, 10);
+  const regimeBoost = analysisData?.marketRegime ? analysisData.marketRegime.momentumQualityScore / 100 : 0;
+  const freshnessBoost = analysisData?.signalTiming ? analysisData.signalTiming.signalFreshnessScore / 100 : 0;
+  const signalStrength = clamp(trendPoints + rsiPoints + macdPoints + emaPoints + regimeBoost + freshnessBoost, 0, 10);
   const ringHue = signalStrength >= 7 ? '#22c55e' : signalStrength >= 4 ? '#f59e0b' : '#ef4444';
 
   const bullishSignals: string[] = [];
@@ -491,7 +591,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
                       <div ref={indicatorMenuRef} className="relative">
                       <button
-                        onClick={() => setIsIndicatorMenuOpen((prev) => !prev)}
+                        onClick={() => setIsIndicatorMenuOpen((prev: boolean) => !prev)}
                         className="flex items-center space-x-2 px-3 py-1 rounded-lg text-sm font-medium bg-gray-800 text-gray-300 hover:text-white transition"
                       >
                         <span>Indicators</span>
@@ -569,7 +669,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
               </div>
 
               <div className="space-y-6">
-                {showAnalysis && analysis && (
+                {showAnalysis && analysisData && (
                   <div className="space-y-5">
                     <div className={`${analysisCardClass} p-4`}>
                       <div className="grid grid-cols-3 gap-2 text-xs">
@@ -583,8 +683,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                         </div>
                         <div className="rounded-lg border border-gray-700/50 bg-[#0a0a0f]/60 px-2 py-2">
                           <p className="text-gray-500 mb-0.5">Bias</p>
-                          <p className={`font-semibold ${analysis.entryGuidance.direction === 'BUY' ? 'text-green-300' : analysis.entryGuidance.direction === 'SELL' ? 'text-red-300' : 'text-gray-300'}`}>
-                            {analysis.entryGuidance.direction === 'BUY' ? 'LONG' : analysis.entryGuidance.direction === 'SELL' ? 'SHORT' : 'NEUTRAL'}
+                          <p className={`font-semibold ${biasDirection === 'LONG' ? 'text-green-300' : biasDirection === 'SHORT' ? 'text-red-300' : 'text-gray-300'}`}>
+                            {biasDirection}
                           </p>
                         </div>
                       </div>
@@ -621,10 +721,10 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                       </div>
                     </div>
 
-                    {analysis.entryGuidance && analysis.entryGuidance.direction !== 'NONE' && (() => {
-                      const entry = analysis.entryGuidance.entryPrice;
-                      const stop = analysis.entryGuidance.stopLoss;
-                      const target = analysis.entryGuidance.target;
+                    {analysisData.entryGuidance && analysisData.entryGuidance.direction !== 'NONE' && (() => {
+                      const entry = analysisData.entryGuidance.entryPrice;
+                      const stop = analysisData.entryGuidance.stopLoss;
+                      const target = analysisData.entryGuidance.target;
                       const ladderMin = Math.min(entry, stop, target);
                       const ladderMax = Math.max(entry, stop, target);
                       const range = Math.max(ladderMax - ladderMin, 0.0001);
@@ -632,17 +732,17 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                       const stopPct = ((stop - ladderMin) / range) * 100;
                       const targetPct = ((target - ladderMin) / range) * 100;
                       const riskPct = Math.abs((entry - stop) / entry) * 100;
-                      const directionText = analysis.entryGuidance.direction === 'BUY' ? 'LONG' : 'SHORT';
+                      const directionText = analysisData.entryGuidance.direction === 'BUY' ? 'LONG' : 'SHORT';
 
                       return (
                         <div className={analysisCardClass}>
                           <h3 className={analysisTitleClass}>Entry Guidance</h3>
                           <div className="space-y-3">
                             <div className="flex items-center justify-between">
-                              <span className={`text-xs px-3 py-1 rounded border font-semibold ${getSignalColor(analysis.entryGuidance.direction)}`}>
+                              <span className={`text-xs px-3 py-1 rounded border font-semibold ${getSignalColor(analysisData.entryGuidance.direction)}`}>
                                 {directionText}
                               </span>
-                              <span className="text-xs text-gray-400">Confidence {analysis.confidence.toFixed(1)}%</span>
+                              <span className="text-xs text-gray-400">Confidence {analysisData.confidence.toFixed(1)}%</span>
                             </div>
                             <div className="grid grid-cols-3 gap-2 text-xs">
                               <div className="bg-[#0a0a0f]/60 border border-gray-800/60 rounded p-2">
@@ -660,12 +760,36 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-gray-400">Risk : Reward</span>
-                              <span className="text-white font-semibold">1 : {analysis.entryGuidance.riskRewardRatio.toFixed(2)}</span>
+                              <span className="text-white font-semibold">1 : {analysisData.entryGuidance.riskRewardRatio.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-gray-400">Risk to Stop</span>
                               <span className="text-red-300 font-semibold">{riskPct.toFixed(2)}%</span>
                             </div>
+
+                            {(analysisData.entryGuidance.optionType || analysisData.entryGuidance.optionStrike !== undefined) && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-400">Option Hint</span>
+                                <span className="text-indigo-300 font-semibold">
+                                  {analysisData.entryGuidance.optionType ?? 'NA'} {analysisData.entryGuidance.optionStrike ?? ''}
+                                </span>
+                              </div>
+                            )}
+
+                            {analysisData.entryGuidance.expectedHoldingMinutes !== undefined && analysisData.entryGuidance.expectedHoldingMinutes !== null && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-400">Expected Hold</span>
+                                <span className="text-gray-200">{analysisData.entryGuidance.expectedHoldingMinutes} min</span>
+                              </div>
+                            )}
+
+                            {analysisData.entryGuidance.confidenceBreakdown && (
+                              <div className="grid grid-cols-3 gap-2 text-[11px]">
+                                <div className="bg-[#0a0a0f]/60 rounded p-2 text-gray-300">Trend {analysisData.entryGuidance.confidenceBreakdown.trend}</div>
+                                <div className="bg-[#0a0a0f]/60 rounded p-2 text-gray-300">Momentum {analysisData.entryGuidance.confidenceBreakdown.momentum}</div>
+                                <div className="bg-[#0a0a0f]/60 rounded p-2 text-gray-300">Volume {analysisData.entryGuidance.confidenceBreakdown.volume}</div>
+                              </div>
+                            )}
 
                             <div className="mt-2 bg-[#0a0a0f]/50 rounded-lg p-3">
                               <div className="relative h-14">
@@ -702,7 +826,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                         </div>
                         <div className="flex justify-between bg-[#0a0a0f]/50 rounded px-3 py-2">
                           <span className="text-gray-400">Volume</span>
-                          <span className={currentVolume >= avgVolume20 ? 'text-green-300' : 'text-amber-300'}>{volumeState}</span>
+                          <span className={relativeVolume >= 1 ? 'text-green-300' : 'text-amber-300'}>{volumeState} ({relativeVolume.toFixed(2)}x)</span>
                         </div>
                       </div>
                     </div>
@@ -713,6 +837,12 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                         <div className="flex justify-between"><span className="text-gray-400">Bollinger Upper</span><span className="text-white">{formatPrice(bollUpper)}</span></div>
                         <div className="flex justify-between"><span className="text-gray-400">Bollinger Middle</span><span className="text-white">{formatPrice(bollMid)}</span></div>
                         <div className="flex justify-between"><span className="text-gray-400">Bollinger Lower</span><span className="text-white">{formatPrice(bollLower)}</span></div>
+                        {analysisData.structureLevels && (
+                          <>
+                            <div className="flex justify-between"><span className="text-gray-400">Nearest Support</span><span className="text-green-300">{analysisData.structureLevels.nearestSupport !== null ? formatPrice(analysisData.structureLevels.nearestSupport) : 'NA'}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-400">Nearest Resistance</span><span className="text-red-300">{analysisData.structureLevels.nearestResistance !== null ? formatPrice(analysisData.structureLevels.nearestResistance) : 'NA'}</span></div>
+                          </>
+                        )}
                         <div className="grid grid-cols-3 gap-2 text-xs mt-2">
                           <div className="bg-[#0a0a0f]/50 rounded p-2 text-gray-300">to Upper: {Math.abs(distanceToUpper).toFixed(2)}%</div>
                           <div className="bg-[#0a0a0f]/50 rounded p-2 text-gray-300">to Mid: {Math.abs(distanceToMiddle).toFixed(2)}%</div>
@@ -735,7 +865,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                         </div>
                         <div>
                           <p className="text-white font-semibold">Composite score / 10</p>
-                          <p className="text-xs text-gray-400">Trend + RSI + MACD + EMA structure</p>
+                          <p className="text-xs text-gray-400">Trend + RSI + MACD + EMA + Regime + Freshness</p>
                         </div>
                       </div>
 
@@ -753,6 +883,62 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           </div>
                         ))}
                       </div>
+                    </div>
+
+                    <div className={analysisCardClass}>
+                      <h3 className={analysisTitleClass}>Timing & Regime</h3>
+                      <div className="space-y-2 text-sm">
+                        {analysisData.signalTiming && (
+                          <>
+                            <div className="flex justify-between bg-[#0a0a0f]/50 rounded px-3 py-2">
+                              <span className="text-gray-400">Signal Age</span>
+                              <span className="text-gray-200">{analysisData.signalTiming.signalAgeBars ?? 'NA'} bars</span>
+                            </div>
+                            <div className="flex justify-between bg-[#0a0a0f]/50 rounded px-3 py-2">
+                              <span className="text-gray-400">Freshness</span>
+                              <span className="text-indigo-300">{analysisData.signalTiming.signalFreshnessScore}/100</span>
+                            </div>
+                          </>
+                        )}
+                        {analysisData.marketRegime && (
+                          <div className="grid grid-cols-3 gap-2 text-[11px]">
+                            <div className="bg-[#0a0a0f]/60 rounded p-2 text-gray-300">Vol {analysisData.marketRegime.volatilityRegime}</div>
+                            <div className="bg-[#0a0a0f]/60 rounded p-2 text-gray-300">Trend {analysisData.marketRegime.trendStrengthScore}</div>
+                            <div className="bg-[#0a0a0f]/60 rounded p-2 text-gray-300">Momentum {analysisData.marketRegime.momentumQualityScore}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {analysisData.noTradeContext && (
+                      <div className={analysisCardClass}>
+                        <h3 className={analysisTitleClass}>No-Trade Context</h3>
+                        <div className="space-y-2 text-sm">
+                          <div className="text-amber-300 font-semibold">{analysisData.noTradeContext.whyNoTradeCode}</div>
+                          <p className="text-gray-300">{analysisData.noTradeContext.whyNoTradeMessage}</p>
+                          {analysisData.noTradeContext.nextTriggerCondition && (
+                            <div className="text-xs text-indigo-300">Trigger: {analysisData.noTradeContext.nextTriggerCondition}</div>
+                          )}
+                          {analysisData.noTradeContext.nextTriggerPrice !== null && (
+                            <div className="text-xs text-gray-300">Next trigger price: {formatPrice(analysisData.noTradeContext.nextTriggerPrice)}</div>
+                          )}
+                          {analysisData.noTradeContext.estimatedRecheckMinutes !== null && (
+                            <div className="text-xs text-gray-400">Recheck in ~{analysisData.noTradeContext.estimatedRecheckMinutes} min</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className={analysisCardClass}>
+                      <h3 className={analysisTitleClass}>Decision Context</h3>
+                      <p className="text-sm text-gray-300 leading-relaxed">{analysisData.explanation}</p>
+                      {analysisData.reasoningPoints.length > 0 && (
+                        <ul className="mt-3 space-y-1 text-xs text-gray-400 list-disc list-inside">
+                          {analysisData.reasoningPoints.map((point) => (
+                            <li key={point}>{point}</li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   </div>
                 )}

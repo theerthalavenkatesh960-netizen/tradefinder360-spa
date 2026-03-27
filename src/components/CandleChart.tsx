@@ -39,6 +39,7 @@ export const CandleChart = ({
   const emaFastSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const emaSlowSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const bbUpperSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const bbMiddleSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const bbLowerSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const toUTCTimestamp = (date: string | number | Date): UTCTimestamp =>
   (new Date(date).getTime() / 1000) as UTCTimestamp;
@@ -102,15 +103,22 @@ export const CandleChart = ({
     });
 
     const bbUpperSeries = chart.addSeries(LineSeries, {
-      color: '#6b7280',
-      lineWidth: 1,
+      color: '#ef4444',
+      lineWidth: 1.25,
       lineStyle: 2,
       title: 'BB Upper',
     });
 
-    const bbLowerSeries = chart.addSeries(LineSeries, {
-      color: '#6b7280',
+    const bbMiddleSeries = chart.addSeries(LineSeries, {
+      color: '#f59e0b',
       lineWidth: 1,
+      lineStyle: 1,
+      title: 'BB Middle',
+    });
+
+    const bbLowerSeries = chart.addSeries(LineSeries, {
+      color: '#22c55e',
+      lineWidth: 1.25,
       lineStyle: 2,
       title: 'BB Lower',
     });
@@ -120,6 +128,7 @@ export const CandleChart = ({
     emaFastSeriesRef.current = emaFastSeries;
     emaSlowSeriesRef.current = emaSlowSeries;
     bbUpperSeriesRef.current = bbUpperSeries;
+    bbMiddleSeriesRef.current = bbMiddleSeries;
     bbLowerSeriesRef.current = bbLowerSeries;
 
     const handleResize = () => {
@@ -153,7 +162,11 @@ export const CandleChart = ({
   
 
   useEffect(() => {
-    if (!indicators.length || !showEMA) return;
+    if (!showEMA || !indicators.length) {
+      emaFastSeriesRef.current?.setData([]);
+      emaSlowSeriesRef.current?.setData([]);
+      return;
+    }
 
     const emaFastData: LineData[] = indicators
       .filter((i) => i.emaFast > 0)
@@ -174,13 +187,25 @@ export const CandleChart = ({
   }, [indicators, showEMA]);
 
   useEffect(() => {
-    if (!indicators.length || !showBollinger) return;
+    if (!showBollinger || !indicators.length) {
+      bbUpperSeriesRef.current?.setData([]);
+      bbMiddleSeriesRef.current?.setData([]);
+      bbLowerSeriesRef.current?.setData([]);
+      return;
+    }
 
     const bbUpperData: LineData[] = indicators
       .filter((i) => i.bollingerUpper > 0)
       .map((i) => ({
         time: toUTCTimestamp(i.timestamp),
         value: i.bollingerUpper,
+      }));
+
+    const bbMiddleData: LineData[] = indicators
+      .filter((i) => i.bollingerMiddle > 0)
+      .map((i) => ({
+        time: toUTCTimestamp(i.timestamp),
+        value: i.bollingerMiddle,
       }));
 
     const bbLowerData: LineData[] = indicators
@@ -191,6 +216,7 @@ export const CandleChart = ({
       }));
 
     bbUpperSeriesRef.current?.setData(bbUpperData);
+    bbMiddleSeriesRef.current?.setData(bbMiddleData);
     bbLowerSeriesRef.current?.setData(bbLowerData);
   }, [indicators, showBollinger]);
 

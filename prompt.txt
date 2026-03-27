@@ -153,3 +153,141 @@ Do not change API service files or store files
   "reasoningPoints": [],
   "analysedAt": "2026-03-27T07:31:40.98648+00:00"
 }
+
+
+
+I need to upgrade the instrument analysis API response to support advanced trading decision UI in my React app.
+
+Current response already includes:
+
+instrumentKey, symbol, exchange
+indicators (emaFast, emaSlow, rsi, macdLine, macdSignal, macdHistogram, adx, plusDI, minusDI, atr, bollingerUpper, bollingerMiddle, bollingerLower, vwap, timestamp)
+trendState (state, bias, setupScore, qualityLabel, scoreBreakdown)
+entryGuidance (nullable)
+confidence, explanation, reasoningPoints, analysedAt
+Please extend the response with the following fields while keeping full backward compatibility.
+
+Entry guidance diagnostics (when entryGuidance is null)
+Add an object named noTradeContext:
+whyNoTradeCode: string enum
+NOT_PULLBACK_READY
+LOW_VOLUME
+WEAK_TREND
+RISK_TOO_HIGH
+CONFLICTING_SIGNALS
+OUTSIDE_TRADING_WINDOW
+OTHER
+whyNoTradeMessage: string (human-readable reason)
+nextTriggerPrice: number | null
+nextTriggerCondition: string | null
+estimatedRecheckMinutes: number | null
+invalidatesAt: string | null (ISO datetime)
+Volume diagnostics
+Add object volumeContext:
+currentVolume: number
+volume20Avg: number
+relativeVolume: number (currentVolume / volume20Avg)
+deliveryVolumeRatio: number | null
+isAboveAverage: boolean
+Structure and key levels
+Add object structureLevels:
+sessionHigh: number | null
+sessionLow: number | null
+previousDayHigh: number | null
+previousDayLow: number | null
+nearestSupport: number | null
+nearestResistance: number | null
+pivot: number | null
+r1: number | null
+s1: number | null
+Signal timing and freshness
+Add object signalTiming:
+signalAgeBars: number | null
+barsSinceMacdCross: number | null
+barsSinceRsiZoneExit: number | null
+signalFreshnessScore: number (0-100)
+Market regime
+Add object marketRegime:
+volatilityRegime: string enum (LOW, NORMAL, HIGH)
+trendStrengthScore: number (0-100)
+rangeCompressionScore: number (0-100)
+momentumQualityScore: number (0-100)
+Optional guidance quality fields
+Inside entryGuidance (if non-null), add:
+confidenceBreakdown:
+trend: number
+momentum: number
+volume: number
+structure: number
+volatility: number
+total: number
+expectedHoldingMinutes: number | null
+maxAdverseExcursionPct: number | null
+maxFavorableExcursionPct: number | null
+Rules
+
+Do not remove or rename existing fields.
+Keep existing semantics unchanged.
+New fields should be nullable where data is unavailable.
+All timestamps must be ISO 8601.
+Numeric fields must be numbers (not strings).
+Response should remain stable across symbols/timeframes.
+Please also provide:
+
+Updated OpenAPI schema for this response
+One sample response where entryGuidance is null
+One sample response where entryGuidance is present
+Optional target response shape example
+
+{
+"instrumentKey": "NSE_EQ|INE040A01034",
+"symbol": "HDFCBANK",
+"exchange": "NSE",
+"indicators": {},
+"trendState": {},
+"entryGuidance": null,
+"noTradeContext": {
+"whyNoTradeCode": "NOT_PULLBACK_READY",
+"whyNoTradeMessage": "No active recommendation for current trend phase",
+"nextTriggerPrice": 768.2,
+"nextTriggerCondition": "Price closes above EMA fast with rising MACD histogram",
+"estimatedRecheckMinutes": 15,
+"invalidatesAt": null
+},
+"volumeContext": {
+"currentVolume": 184200,
+"volume20Avg": 156800,
+"relativeVolume": 1.17,
+"deliveryVolumeRatio": null,
+"isAboveAverage": true
+},
+"structureLevels": {
+"sessionHigh": 770.1,
+"sessionLow": 758.4,
+"previousDayHigh": 772.0,
+"previousDayLow": 755.8,
+"nearestSupport": 759.5,
+"nearestResistance": 769.8,
+"pivot": 763.9,
+"r1": 771.3,
+"s1": 756.5
+},
+"signalTiming": {
+"signalAgeBars": 2,
+"barsSinceMacdCross": 1,
+"barsSinceRsiZoneExit": 4,
+"signalFreshnessScore": 78
+},
+"marketRegime": {
+"volatilityRegime": "NORMAL",
+"trendStrengthScore": 67,
+"rangeCompressionScore": 42,
+"momentumQualityScore": 61
+},
+"confidence": 67,
+"explanation": "No active recommendation — market state is TRENDING_BEARISH, not PULLBACK_READY",
+"reasoningPoints": [],
+"analysedAt": "2026-03-27T07:31:40.98648+00:00"
+}
+
+If you want, I can also give you a second prompt specifically for SQL/EF model changes and migration-safe rollout steps.
