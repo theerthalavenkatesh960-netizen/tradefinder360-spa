@@ -104,7 +104,7 @@ export const StockDetail = () => {
   const [timeframe, setTimeframe] = useState(15);
   const [hasChangedTimeframe, setHasChangedTimeframe] = useState(false);
   const [isIndicatorMenuOpen, setIsIndicatorMenuOpen] = useState(false);
-  const [selectedIndicators, setSelectedIndicators] = useState<IndicatorKey[]>([]);
+  const [selectedIndicators, setSelectedIndicators] = useState<IndicatorKey[]>(['rsi', 'macd']);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const [backtestRequest, setBacktestRequest] = useState<BacktestRequest | null>(null);
@@ -194,7 +194,7 @@ export const StockDetail = () => {
 
   const shouldFetchIndicators =
     !!symbol &&
-    activeTab === 'analysis' &&
+    (activeTab === 'analysis' || activeTab === 'backtest') &&
     selectedIndicators.length > 0;
 
   const { data: analysis } = useQuery({
