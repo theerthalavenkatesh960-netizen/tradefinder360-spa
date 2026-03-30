@@ -591,13 +591,18 @@ export const BacktestChart = ({
   useEffect(() => {
     if (!emaFastRef.current || !emaSlowRef.current || !indicators.length) return;
 
-    const fastData: LineData[] = indicators
-      .filter((i) => i.emaFast > 0)
-      .map((i) => ({ time: toUTC(i.timestamp), value: i.emaFast }));
+    const dedup = (data: LineData[]) => {
+      const seen = new Map<number, LineData>();
+      for (const d of data) seen.set(d.time as number, d);
+      return Array.from(seen.values()).sort((a, b) => (a.time as number) - (b.time as number));
+    };
 
-    const slowData: LineData[] = indicators
-      .filter((i) => i.emaSlow > 0)
-      .map((i) => ({ time: toUTC(i.timestamp), value: i.emaSlow }));
+    const fastData = dedup(
+      indicators.filter((i) => i.emaFast > 0).map((i) => ({ time: toUTC(i.timestamp), value: i.emaFast }))
+    );
+    const slowData = dedup(
+      indicators.filter((i) => i.emaSlow > 0).map((i) => ({ time: toUTC(i.timestamp), value: i.emaSlow }))
+    );
 
     emaFastRef.current.setData(fastData);
     emaSlowRef.current.setData(slowData);
