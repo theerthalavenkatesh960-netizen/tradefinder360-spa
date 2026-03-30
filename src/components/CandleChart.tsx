@@ -203,7 +203,12 @@ export const CandleChart = ({
 
   // 📉 BOLLINGER
   useEffect(() => {
-    if (!showBollinger || !indicators.length) return;
+    if (!showBollinger || !indicators.length) {
+      bbUpperSeriesRef.current?.setData([]);
+      bbMiddleSeriesRef.current?.setData([]);
+      bbLowerSeriesRef.current?.setData([]);
+      return;
+    }
 
     bbUpperSeriesRef.current?.setData(uniqueByTime(indicators.map(i => ({
       time: toUTCTimestamp(i.timestamp),
@@ -223,7 +228,12 @@ export const CandleChart = ({
 
   // 📊 RSI
   useEffect(() => {
-    if (!showRSI || !indicators.length) return;
+    const visible = showRSI && indicators.length > 0;
+    rsiSeriesRef.current?.applyOptions({ visible });
+    rsiOverboughtRef.current?.applyOptions({ visible });
+    rsiOversoldRef.current?.applyOptions({ visible });
+
+    if (!visible) return;
 
     const rsiData = uniqueByTime(indicators.map(i => ({
       time: toUTCTimestamp(i.timestamp),
@@ -237,7 +247,12 @@ export const CandleChart = ({
 
   // 📊 MACD
   useEffect(() => {
-    if (!showMACD || !indicators.length) return;
+    const visible = showMACD && indicators.length > 0;
+    macdLineSeriesRef.current?.applyOptions({ visible });
+    macdSignalSeriesRef.current?.applyOptions({ visible });
+    macdHistogramSeriesRef.current?.applyOptions({ visible });
+
+    if (!visible) return;
 
     macdLineSeriesRef.current?.setData(uniqueByTime(indicators.map(i => ({
       time: toUTCTimestamp(i.timestamp),
@@ -255,6 +270,29 @@ export const CandleChart = ({
       color: i.macdHistogram >= 0 ? '#22c55e' : '#ef4444'
     }))));
   }, [indicators, showMACD]);
+
+  // 🗺 LAYOUT — reclaim chart space when RSI/MACD panels toggle
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const hasRSI = showRSI;
+    const hasMACD = showMACD;
+
+    if (!hasRSI && !hasMACD) {
+      chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.02, bottom: 0.02 } });
+    } else if (hasRSI && !hasMACD) {
+      chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.02, bottom: 0.22 } });
+      chart.priceScale('rsi').applyOptions({ scaleMargins: { top: 0.80, bottom: 0.02 } });
+    } else if (!hasRSI && hasMACD) {
+      chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.02, bottom: 0.22 } });
+      chart.priceScale('macd').applyOptions({ scaleMargins: { top: 0.80, bottom: 0.02 } });
+    } else {
+      chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.02, bottom: 0.42 } });
+      chart.priceScale('rsi').applyOptions({ scaleMargins: { top: 0.62, bottom: 0.20 } });
+      chart.priceScale('macd').applyOptions({ scaleMargins: { top: 0.82, bottom: 0.02 } });
+    }
+  }, [showRSI, showMACD]);
 
   // 📍 MARKERS
   useEffect(() => {
