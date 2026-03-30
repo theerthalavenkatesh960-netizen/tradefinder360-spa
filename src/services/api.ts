@@ -181,7 +181,7 @@ export interface BacktestRequest {
   from: string;
   to: string;
   strategy: {
-    name: 'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER';
+    name: 'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK';
     params: {
       timeframe: number;
       riskPercent: number;

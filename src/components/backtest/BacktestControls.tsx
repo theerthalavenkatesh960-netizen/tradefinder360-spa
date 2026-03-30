@@ -14,6 +14,7 @@ const STRATEGIES = [
   { value: 'ORB', label: 'Opening Range Breakout', description: '5-min high/low breakout' },
   { value: 'RSI_REVERSAL', label: 'RSI Reversal', description: 'Overbought/oversold reversal' },
   { value: 'EMA_CROSSOVER', label: 'EMA Crossover', description: 'Fast/slow EMA cross' },
+  { value: 'EMA_PULLBACK', label: 'EMA Pullback', description: 'Crossover + retest entry' },
 ] as const;
 
 const TIMEFRAMES = [
@@ -36,7 +37,7 @@ const TARGET_TYPES = [
 
 export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsProps) => {
   const [expanded, setExpanded] = useState(true);
-  const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER'>('ORB');
+  const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK'>('ORB');
   const [from, setFrom] = useState(format(subDays(new Date(), 90), 'yyyy-MM-dd'));
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [timeframe, setTimeframe] = useState(5);
@@ -64,8 +65,8 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
           targetType,
           rrRatio: targetType === 'RR_RATIO' ? rrRatio : undefined,
           slPercent: slType === 'FIXED_PERCENT' ? slPercent : undefined,
-          fastEMA: strategy === 'EMA_CROSSOVER' ? fastEMA : undefined,
-          slowEMA: strategy === 'EMA_CROSSOVER' ? slowEMA : undefined,
+          fastEMA: (strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK') ? fastEMA : undefined,
+          slowEMA: (strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK') ? slowEMA : undefined,
           rsiOverbought: strategy === 'RSI_REVERSAL' ? rsiOverbought : undefined,
           rsiOversold: strategy === 'RSI_REVERSAL' ? rsiOversold : undefined,
         },
@@ -280,7 +281,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                     </>
                   )}
 
-                  {strategy === 'EMA_CROSSOVER' && (
+                  {(strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK') && (
                     <div className="mt-3 space-y-2">
                       <label className="block text-xs font-medium text-gray-400 uppercase tracking-wide">
                         EMA Periods
