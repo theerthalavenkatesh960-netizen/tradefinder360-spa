@@ -1,6 +1,20 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 
+const IST_TIMEZONE = 'Asia/Kolkata';
+
+export const formatUTCToIST = (utcTimestamp: number): string => {
+  const date = new Date(utcTimestamp * 1000);
+  const istDate = toZonedTime(date, IST_TIMEZONE);
+  return format(istDate, 'dd MMM, HH:mm');
+};
+
+export const formatUTCToISTFull = (utcTimestamp: number): string => {
+  const date = new Date(utcTimestamp * 1000);
+  const istDate = toZonedTime(date, IST_TIMEZONE);
+  return format(istDate, 'dd MMM yyyy, HH:mm:ss');
+};
+
 export const formatPrice = (price: number): string => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',

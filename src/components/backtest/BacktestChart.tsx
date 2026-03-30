@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import {
   createChart,
   IChartApi,
@@ -9,12 +9,11 @@ import {
   CandlestickData,
   LineData,
   createSeriesMarkers,
-  IPriceLine,
 } from 'lightweight-charts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { differenceInMinutes } from 'date-fns';
 import type { Candle, Indicators, BacktestTrade } from '../../services/api';
-import { formatPrice } from '../../utils/formatters';
+import { formatPrice, formatUTCToIST } from '../../utils/formatters';
 
 interface TradeBox {
   id: string;
@@ -22,6 +21,13 @@ interface TradeBox {
   y1: number;
   x2: number;
   y2: number;
+}
+
+interface TradeHitTarget {
+  id: string;
+  x: number;
+  y: number;
+  r: number;
 }
 
 interface TradeLane {
@@ -32,6 +38,7 @@ interface TradeLane {
   yStop: number;
   yTarget: number;
   isWin: boolean;
+  isExited: boolean;
   isSelected: boolean;
   tradeType: BacktestTrade['tradeType'];
 }
@@ -50,6 +57,11 @@ interface BacktestChartProps {
   hoveredTradeId: string | null;
   onTradeSelect: (id: string) => void;
   onTradeHover: (id: string | null) => void;
+  replayNowMs?: number | null;
+  replayIndex?: number;
+  replayFollowEnabled?: boolean;
+  isReplayPlaying?: boolean;
+  onReplayPauseFromZoom?: () => void;
 }
 
 const toUTC = (d: string | number | Date): UTCTimestamp =>
@@ -65,6 +77,11 @@ export const BacktestChart = ({
   hoveredTradeId,
   onTradeSelect,
   onTradeHover,
+  replayNowMs = null,
+  replayIndex = 0,
+  replayFollowEnabled = false,
+  isReplayPlaying = false,
+  onReplayPauseFromZoom,
 }: BacktestChartProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -72,19 +89,29 @@ export const BacktestChart = ({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const emaFastRef = useRef<ISeriesApi<'Line'> | null>(null);
   const emaSlowRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const activePriceLinesRef = useRef<IPriceLine[]>([]);
   const tradeBoxesRef = useRef<TradeBox[]>([]);
+  const tradeHitTargetsRef = useRef<TradeHitTarget[]>([]);
   const rafRef = useRef<number | null>(null);
+  const mouseRafRef = useRef<number | null>(null);
+  const replayCenterRafRef = useRef<number | null>(null);
+  const lastHoveredIdRef = useRef<string | null>(null);
+  const latestPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const lastRangeSpanRef = useRef(120);
+  const userAdjustedRangeRef = useRef(false);
+  const isProgrammaticRangeChangeRef = useRef(false);
 
   const tradesRef = useRef(trades);
   const selectedIdRef = useRef(selectedTradeId);
   const hoveredIdRef = useRef(hoveredTradeId);
+  const replayNowRef = useRef<number | null>(replayNowMs);
 
   useEffect(() => { tradesRef.current = trades; }, [trades]);
   useEffect(() => { selectedIdRef.current = selectedTradeId; }, [selectedTradeId]);
   useEffect(() => { hoveredIdRef.current = hoveredTradeId; }, [hoveredTradeId]);
+  useEffect(() => { replayNowRef.current = replayNowMs; }, [replayNowMs]);
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const candleSourceSignatureRef = useRef('');
 
   const drawBoxes = useCallback(() => {
     const canvas = overlayRef.current;
@@ -114,11 +141,38 @@ export const BacktestChart = ({
     const selectedId = selectedIdRef.current;
     const hoveredId = hoveredIdRef.current;
     const boxes: TradeBox[] = [];
+    const hitTargets: TradeHitTarget[] = [];
     const lanes: TradeLane[] = [];
 
+    if (replayNowRef.current !== null) {
+      const replayX = chart.timeScale().timeToCoordinate((replayNowRef.current / 1000) as UTCTimestamp);
+      if (replayX !== null) {
+        const glowHalfWidth = 6;
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.1)';
+        ctx.fillRect(replayX - glowHalfWidth, 0, glowHalfWidth * 2, height);
+
+        ctx.beginPath();
+        ctx.moveTo(replayX, 0);
+        ctx.lineTo(replayX, height);
+        ctx.strokeStyle = 'rgba(129, 140, 248, 0.65)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+
     for (const trade of currentTrades) {
+      const replayNow = replayNowRef.current;
+      const entryMs = new Date(trade.entryTime).getTime();
+      const exitMs = new Date(trade.exitTime).getTime();
+      const effectiveExitMs = replayNow !== null ? Math.min(exitMs, replayNow) : exitMs;
+      const isExited = replayNow !== null ? replayNow >= exitMs : true;
+
+      if (replayNow !== null && replayNow < entryMs) {
+        continue;
+      }
+
       const x1 = chart.timeScale().timeToCoordinate(toUTC(trade.entryTime));
-      const x2 = chart.timeScale().timeToCoordinate(toUTC(trade.exitTime));
+      const x2 = chart.timeScale().timeToCoordinate((effectiveExitMs / 1000) as UTCTimestamp);
       const priceHigh = Math.max(trade.stopLoss, trade.target);
       const priceLow = Math.min(trade.stopLoss, trade.target);
       const y1 = series.priceToCoordinate(priceHigh);
@@ -149,24 +203,57 @@ export const BacktestChart = ({
           yStop: slY,
           yTarget: targetY,
           isWin,
+          isExited,
           isSelected,
           tradeType: trade.tradeType,
         });
+
+        hitTargets.push({ id: trade.id, x: x1, y: entryY, r: 8 });
+        if (isExited) {
+          hitTargets.push({ id: trade.id, x: x2, y: entryY, r: 8 });
+        }
       }
 
-      const alpha = isSelected ? 0.18 : isHovered ? 0.1 : 0.06;
-      const strokeAlpha = isSelected ? 0.8 : isHovered ? 0.6 : 0.3;
+      const alpha = isExited ? (isSelected ? 0.18 : isHovered ? 0.1 : 0.05) : isSelected ? 0.14 : 0.06;
+      const strokeAlpha = isExited ? (isSelected ? 0.8 : isHovered ? 0.6 : 0.3) : isSelected ? 0.75 : 0.45;
 
-      ctx.fillStyle = isWin
+      ctx.fillStyle = isExited
+        ? isWin
         ? `rgba(34, 197, 94, ${alpha})`
-        : `rgba(239, 68, 68, ${alpha})`;
+        : `rgba(239, 68, 68, ${alpha})`
+        : `rgba(99, 102, 241, ${alpha})`;
       ctx.fillRect(rectX, rectY, rectW, rectH);
 
-      ctx.strokeStyle = isWin
+      ctx.strokeStyle = isExited
+        ? isWin
         ? `rgba(34, 197, 94, ${strokeAlpha})`
-        : `rgba(239, 68, 68, ${strokeAlpha})`;
+        : `rgba(239, 68, 68, ${strokeAlpha})`
+        : `rgba(99, 102, 241, ${strokeAlpha})`;
       ctx.lineWidth = isSelected ? 1.5 : 1;
       ctx.strokeRect(rectX, rectY, rectW, rectH);
+
+      if (isSelected || isHovered) {
+        const tradeWidth = Math.max(Math.abs(x2 - x1), 2);
+        const tradeStart = Math.min(x1, x2);
+        const profitY = series.priceToCoordinate(trade.target);
+        const stopY = series.priceToCoordinate(trade.stopLoss);
+        const entryBandY = series.priceToCoordinate(trade.entryPrice);
+
+        if (profitY !== null && stopY !== null && entryBandY !== null) {
+          const upperProfit = Math.min(entryBandY, profitY);
+          const profitHeight = Math.max(Math.abs(entryBandY - profitY), 1);
+          const upperRisk = Math.min(entryBandY, stopY);
+          const riskHeight = Math.max(Math.abs(entryBandY - stopY), 1);
+
+          const profitTint = isWin ? 'rgba(34, 197, 94, 0.18)' : 'rgba(34, 197, 94, 0.08)';
+          const riskTint = isWin ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.18)';
+
+          ctx.fillStyle = profitTint;
+          ctx.fillRect(tradeStart, upperProfit, tradeWidth, profitHeight);
+          ctx.fillStyle = riskTint;
+          ctx.fillRect(tradeStart, upperRisk, tradeWidth, riskHeight);
+        }
+      }
 
       if (slY !== null) {
         ctx.beginPath();
@@ -200,10 +287,10 @@ export const BacktestChart = ({
       ctx.moveTo(lane.xStart, lane.yEntry);
       ctx.lineTo(lane.xEnd, lane.yEntry);
       ctx.strokeStyle = lineColor;
-      ctx.lineWidth = lane.isSelected ? 1.8 : 1.25;
+      ctx.lineWidth = lane.isSelected ? 1.6 : 1.15;
       ctx.stroke();
 
-      const arrowSize = 6;
+      const arrowSize = 5;
       ctx.beginPath();
       ctx.moveTo(lane.xEnd, lane.yEntry);
       ctx.lineTo(lane.xEnd - direction * arrowSize, lane.yEntry - arrowSize / 2);
@@ -211,8 +298,11 @@ export const BacktestChart = ({
       ctx.closePath();
       ctx.fillStyle = lineColor;
       ctx.fill();
+      ctx.strokeStyle = 'rgba(10, 10, 15, 0.95)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
 
-      const markerSize = 7;
+      const markerSize = 5.5;
       ctx.beginPath();
       if (lane.tradeType === 'LONG') {
         ctx.moveTo(lane.xStart, lane.yEntry - markerSize);
@@ -226,21 +316,30 @@ export const BacktestChart = ({
       ctx.closePath();
       ctx.fillStyle = lane.tradeType === 'LONG' ? '#22c55e' : '#ef4444';
       ctx.fill();
+      ctx.strokeStyle = 'rgba(10, 10, 15, 0.95)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
 
-      ctx.beginPath();
-      ctx.arc(lane.xEnd, lane.yEntry, 4.2, 0, Math.PI * 2);
-      ctx.fillStyle = lane.isWin ? '#22c55e' : '#ef4444';
-      ctx.fill();
+      if (lane.isExited) {
+        ctx.beginPath();
+        ctx.arc(lane.xEnd, lane.yEntry, 3.4, 0, Math.PI * 2);
+        ctx.fillStyle = lane.isWin ? '#22c55e' : '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(10, 10, 15, 0.95)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
     }
 
     tradeBoxesRef.current = boxes;
+    tradeHitTargetsRef.current = hitTargets;
     ctx.restore();
   }, []);
 
   useEffect(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => drawBoxes());
-  }, [trades, selectedTradeId, hoveredTradeId, drawBoxes]);
+  }, [trades, selectedTradeId, hoveredTradeId, replayNowMs, drawBoxes]);
 
   // ─── Create chart (once) ────────────────────────────────────────────────
   useEffect(() => {
@@ -263,6 +362,9 @@ export const BacktestChart = ({
         borderColor: '#374151',
       },
       rightPriceScale: { borderColor: '#374151' },
+      localization: {
+        timeFormatter: (utcTimestamp: number) => formatUTCToIST(utcTimestamp),
+      } as any,
       crosshair: {
         vertLine: { color: '#6366f1', width: 1, style: 3 },
         horzLine: { color: '#6366f1', width: 1, style: 3 },
@@ -270,24 +372,28 @@ export const BacktestChart = ({
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderUpColor: '#22c55e',
-      borderDownColor: '#ef4444',
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
+      upColor: '#86efac',
+      downColor: '#fda4af',
+      borderUpColor: '#4ade80',
+      borderDownColor: '#fb7185',
+      wickUpColor: '#bbf7d0',
+      wickDownColor: '#fecdd3',
     });
 
     const emaFast = chart.addSeries(LineSeries, {
-      color: '#3b82f6',
+      color: 'rgba(147, 197, 253, 0.95)',
       lineWidth: 1,
       title: 'EMA F',
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
 
     const emaSlow = chart.addSeries(LineSeries, {
-      color: '#f97316',
+      color: 'rgba(251, 191, 110, 0.92)',
       lineWidth: 1,
       title: 'EMA S',
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
 
     chartRef.current = chart;
@@ -297,6 +403,22 @@ export const BacktestChart = ({
 
     // ✅ v5 fix: store the handler and use unsubscribeVisibleLogicalRangeChange
     const handleRangeChange = () => {
+      const range = chart.timeScale().getVisibleLogicalRange();
+      if (range) {
+        const span = Math.max(30, range.to - range.from);
+        const previousSpan = lastRangeSpanRef.current;
+        lastRangeSpanRef.current = span;
+
+        if (isProgrammaticRangeChangeRef.current) {
+          isProgrammaticRangeChangeRef.current = false;
+        } else {
+          userAdjustedRangeRef.current = true;
+          const spanDelta = Math.abs(span - previousSpan);
+          if (spanDelta > 0.5 && replayNowRef.current !== null && isReplayPlaying) {
+            onReplayPauseFromZoom?.();
+          }
+        }
+      }
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => drawBoxes());
     };
@@ -312,25 +434,54 @@ export const BacktestChart = ({
     });
     if (containerRef.current) resizeObserver.observe(containerRef.current);
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
+    const processPointer = () => {
+      mouseRafRef.current = null;
+      const point = latestPointerRef.current;
+      if (!point) return;
+      const mx = point.x;
+      const my = point.y;
 
-      const hit = tradeBoxesRef.current.find(
+      const markerHit = tradeHitTargetsRef.current.find((h) => {
+        const dx = mx - h.x;
+        const dy = my - h.y;
+        return dx * dx + dy * dy <= h.r * h.r;
+      });
+
+      const boxHit = tradeBoxesRef.current.find(
         (b) => mx >= b.x1 && mx <= b.x2 && my >= b.y1 && my <= b.y2
       );
 
-      if (hit) {
-        const trade = tradesRef.current.find((t) => t.id === hit.id);
+      const hitId = markerHit?.id ?? boxHit?.id ?? null;
+
+      if (hitId) {
+        const trade = tradesRef.current.find((t) => t.id === hitId);
         if (trade) {
           setTooltip({ x: mx, y: my, trade });
-          onTradeHover(hit.id);
+          if (lastHoveredIdRef.current !== hitId) {
+            lastHoveredIdRef.current = hitId;
+            onTradeHover(hitId);
+          }
+          return;
         }
-      } else {
-        setTooltip(null);
+      }
+
+      setTooltip(null);
+      if (lastHoveredIdRef.current !== null) {
+        lastHoveredIdRef.current = null;
         onTradeHover(null);
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      latestPointerRef.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+
+      if (mouseRafRef.current === null) {
+        mouseRafRef.current = requestAnimationFrame(processPointer);
       }
     };
 
@@ -348,7 +499,15 @@ export const BacktestChart = ({
 
     const handleMouseLeave = () => {
       setTooltip(null);
-      onTradeHover(null);
+      latestPointerRef.current = null;
+      if (mouseRafRef.current !== null) {
+        cancelAnimationFrame(mouseRafRef.current);
+        mouseRafRef.current = null;
+      }
+      if (lastHoveredIdRef.current !== null) {
+        lastHoveredIdRef.current = null;
+        onTradeHover(null);
+      }
     };
 
     const el = containerRef.current;
@@ -358,6 +517,8 @@ export const BacktestChart = ({
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (mouseRafRef.current !== null) cancelAnimationFrame(mouseRafRef.current);
+      if (replayCenterRafRef.current !== null) cancelAnimationFrame(replayCenterRafRef.current);
       // ✅ v5 fix: pass the same handler reference to unsubscribe
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange);
       resizeObserver.disconnect();
@@ -369,21 +530,62 @@ export const BacktestChart = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const styledCandles = useMemo(() => {
+    if (!candles.length) return [] as CandlestickData[];
+
+    const replayCutoff = replayNowMs ?? Number.POSITIVE_INFINITY;
+
+    return candles.map((candle) => {
+      const time = toUTC(candle.timestamp);
+      const isUp = candle.close >= candle.open;
+      const isRevealed = new Date(candle.timestamp).getTime() <= replayCutoff;
+
+      if (isRevealed) {
+        return {
+          time,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          color: isUp ? '#22c55e' : '#ef4444',
+          borderColor: isUp ? '#4ade80' : '#f87171',
+          wickColor: isUp ? '#86efac' : '#fca5a5',
+        };
+      }
+
+      return {
+        time,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        color: isUp ? 'rgba(75, 85, 99, 0.33)' : 'rgba(71, 85, 105, 0.33)',
+        borderColor: isUp ? 'rgba(107, 114, 128, 0.48)' : 'rgba(107, 114, 128, 0.48)',
+        wickColor: isUp ? 'rgba(107, 114, 128, 0.4)' : 'rgba(107, 114, 128, 0.4)',
+      };
+    });
+  }, [candles, replayNowMs]);
+
   // ─── Candle data ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!candleSeriesRef.current || !candles.length) return;
+    if (!candleSeriesRef.current || !styledCandles.length) return;
 
-    const data: CandlestickData[] = candles.map((c) => ({
-      time: toUTC(c.timestamp),
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-    }));
+    candleSeriesRef.current.setData(styledCandles);
 
-    candleSeriesRef.current.setData(data);
-    chartRef.current?.timeScale().fitContent();
-  }, [candles]);
+    const sourceSignature = `${candles.length}:${candles[0]?.timestamp ?? ''}:${candles[candles.length - 1]?.timestamp ?? ''}`;
+    const isNewSource = candleSourceSignatureRef.current !== sourceSignature;
+    if (isNewSource) {
+      candleSourceSignatureRef.current = sourceSignature;
+    }
+
+    if (isNewSource && !userAdjustedRangeRef.current) {
+      chartRef.current?.timeScale().fitContent();
+      const range = chartRef.current?.timeScale().getVisibleLogicalRange();
+      if (range) {
+        lastRangeSpanRef.current = Math.max(30, range.to - range.from);
+      }
+    }
+  }, [candles, styledCandles]);
 
   // ─── EMA data ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -406,8 +608,18 @@ export const BacktestChart = ({
     if (!candleSeriesRef.current) return;
 
     const markers = trades
-      .flatMap((trade) => [
-        {
+      .flatMap((trade) => {
+        const replayNow = replayNowMs;
+        const entryMs = new Date(trade.entryTime).getTime();
+        const exitMs = new Date(trade.exitTime).getTime();
+        const hasEntered = replayNow === null || replayNow >= entryMs;
+        const hasExited = replayNow === null || replayNow >= exitMs;
+
+        if (!hasEntered) {
+          return [];
+        }
+
+        const entryMarker = {
           time: toUTC(trade.entryTime),
           position: (trade.tradeType === 'LONG' ? 'belowBar' : 'aboveBar') as
             | 'belowBar'
@@ -418,8 +630,13 @@ export const BacktestChart = ({
             | 'arrowDown',
           text: trade.tradeType === 'LONG' ? 'L' : 'S',
           size: trade.id === selectedTradeId ? 2 : 1,
-        },
-        {
+        };
+
+        if (!hasExited) {
+          return [entryMarker];
+        }
+
+        const exitMarker = {
           time: toUTC(trade.exitTime),
           position: (trade.tradeType === 'LONG' ? 'aboveBar' : 'belowBar') as
             | 'belowBar'
@@ -428,62 +645,51 @@ export const BacktestChart = ({
           shape: 'circle' as const,
           text: '',
           size: 1,
-        },
-      ])
+        };
+
+        return [entryMarker, exitMarker];
+      })
       .sort((a, b) => (a.time as number) - (b.time as number));
 
     createSeriesMarkers(candleSeriesRef.current, markers);
-  }, [trades, selectedTradeId]);
+  }, [trades, selectedTradeId, replayNowMs]);
 
-  // ─── Selected trade: price lines + scroll ────────────────────────────────
+  // ─── Selected trade: scroll only ─────────────────────────────────────────
   useEffect(() => {
-    const series = candleSeriesRef.current;
-    if (!series) return;
-
-    activePriceLinesRef.current.forEach((line) => series.removePriceLine(line));
-    activePriceLinesRef.current = [];
-
     if (!selectedTradeId) return;
     const trade = trades.find((t) => t.id === selectedTradeId);
     if (!trade) return;
 
-    const entryLine = series.createPriceLine({
-      price: trade.entryPrice,
-      color: '#6366f1',
-      lineWidth: 1.5,
-      lineStyle: 0,
-      axisLabelVisible: true,
-      title: 'Entry',
-    });
-
-    const slLine = series.createPriceLine({
-      price: trade.stopLoss,
-      color: '#ef4444',
-      lineWidth: 1,
-      lineStyle: 2,
-      axisLabelVisible: true,
-      title: 'SL',
-    });
-
-    const targetLine = series.createPriceLine({
-      price: trade.target,
-      color: '#22c55e',
-      lineWidth: 1,
-      lineStyle: 2,
-      axisLabelVisible: true,
-      title: 'Target',
-    });
-
-    activePriceLinesRef.current = [entryLine, slLine, targetLine];
-
     const entryMs = new Date(trade.entryTime).getTime();
     const exitMs = new Date(trade.exitTime).getTime();
     const pad = Math.max(exitMs - entryMs, 4 * 60 * 60 * 1000);
+    isProgrammaticRangeChangeRef.current = true;
     chartRef.current?.timeScale().setVisibleRange({
       from: ((entryMs - pad) / 1000) as UTCTimestamp,
       to: ((exitMs + pad) / 1000) as UTCTimestamp,
     });
   }, [selectedTradeId, trades]);
+
+  useEffect(() => {
+    if (!replayFollowEnabled || replayNowMs === null || !candles.length || !chartRef.current) return;
+
+    const chart = chartRef.current;
+    const clampedIndex = clamp(replayIndex, 0, candles.length - 1);
+
+    if (replayCenterRafRef.current !== null) {
+      cancelAnimationFrame(replayCenterRafRef.current);
+    }
+
+    replayCenterRafRef.current = requestAnimationFrame(() => {
+      const span = Math.max(20, lastRangeSpanRef.current);
+      const leftRatio = 0.5;
+      isProgrammaticRangeChangeRef.current = true;
+      chart.timeScale().setVisibleLogicalRange({
+        from: clampedIndex - span * leftRatio,
+        to: clampedIndex + span * (1 - leftRatio),
+      });
+    });
+  }, [replayFollowEnabled, replayNowMs, replayIndex, candles.length]);
 
   const winCount = trades.filter((trade) => trade.pnl >= 0).length;
   const lossCount = trades.length - winCount;

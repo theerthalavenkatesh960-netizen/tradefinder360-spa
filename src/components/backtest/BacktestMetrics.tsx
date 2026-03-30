@@ -36,16 +36,16 @@ const MetricCard = ({ label, value, sub, icon: Icon, iconClass, delay, valueClas
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay }}
-    className="bg-[#12121a]/60 border border-gray-800/50 rounded-xl p-4"
+    className="bg-[#12121a]/60 border border-gray-800/50 rounded-xl p-3"
   >
-    <div className="flex items-center justify-between mb-3">
-      <span className="text-xs text-gray-500 uppercase tracking-widest">{label}</span>
-      <div className={`p-1.5 rounded-lg ${iconClass}`}>
-        <Icon className="w-3.5 h-3.5" />
+    <div className="flex items-center justify-between mb-2">
+      <span className="text-[10px] text-gray-500 uppercase tracking-widest">{label}</span>
+      <div className={`p-1 rounded-md ${iconClass}`}>
+        <Icon className="w-3 h-3" />
       </div>
     </div>
-    <p className={`text-xl font-bold leading-tight ${valueClassName}`}>{value}</p>
-    {sub && <div className="mt-1">{sub}</div>}
+    <p className={`text-base md:text-lg font-bold leading-tight ${valueClassName}`}>{value}</p>
+    {sub && <div className="mt-0.5">{sub}</div>}
   </motion.div>
 );
 
@@ -79,7 +79,7 @@ export const BacktestMetricsBar = ({ metrics }: Props) => {
       : 'text-red-400';
 
   return (
-    <div className="grid grid-cols-3 gap-3 mb-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 mb-3">
       <MetricCard
         label="Total Trades"
         value={metrics.totalTrades}

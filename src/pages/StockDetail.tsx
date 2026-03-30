@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ElementType } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Star, BarChart2, FlaskConical, Check, ChevronDown, XCircle } from 'lucide-react';
+import { ArrowLeft, Star, BarChart2, FlaskConical, Check, ChevronDown, XCircle, Play, Pause, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../services/api';
-import type { Analysis, BacktestRequest, Candle, Stock } from '../services/api';
+import type { Analysis, BacktestRequest, BacktestTrade, Candle, EquityPoint, Stock } from '../services/api';
 import { useWatchlistStore } from '../store/watchlist';
 import { useBacktestStore } from '../store/backtest';
 import { CandleChart } from '../components/CandleChart';
@@ -18,6 +18,15 @@ import { formatPrice, formatPercent, getSignalColor } from '../utils/formatters'
 type Tab = 'analysis' | 'backtest';
 type IndicatorKey = 'ema' | 'bollinger' | 'rsi' | 'macd';
 type CandleEnvelope = { data?: Candle[]; candles?: Candle[] };
+type ReplaySpeed = 0.5 | 1 | 2 | 5;
+
+interface ReplayEvent {
+  id: string;
+  type: 'trade_placed' | 'trade_exited';
+  message: string;
+  at: string;
+  tradeId: string;
+}
 
 const CANDLE_CACHE_KEY = 'tradefinder360:candles:v1';
 const MAX_CACHED_INSTRUMENTS = 5;
@@ -250,7 +259,22 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const [selectedIndicators, setSelectedIndicators] = useState<IndicatorKey[]>(['rsi', 'macd']);
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const [backtestRequest, setBacktestRequest] = useState<BacktestRequest | null>(null);
+  const [isReplayMode, setIsReplayMode] = useState(false);
+  const [isReplayPlaying, setIsReplayPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState<ReplaySpeed>(1);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [isReplayFollowOn, setIsReplayFollowOn] = useState(true);
+  const [isZoomPaused, setIsZoomPaused] = useState(false);
+  const [replayStartIndex, setReplayStartIndex] = useState(0);
+  const [replayEvents, setReplayEvents] = useState<ReplayEvent[]>([]);
+  const [activeReplayEvent, setActiveReplayEvent] = useState<ReplayEvent | null>(null);
   const indicatorMenuRef = useRef<HTMLDivElement>(null);
+  const replayFrameRef = useRef<number | null>(null);
+  const replayLastTsRef = useRef<number | null>(null);
+  const replayAccumulatorRef = useRef(0);
+  const replayEntrySeenRef = useRef<Set<string>>(new Set());
+  const replayExitSeenRef = useRef<Set<string>>(new Set());
+  const replayEventClearRef = useRef<number | null>(null);
 
   const { toggle, isWatched } = useWatchlistStore();
   const { selectedTradeId, hoveredTradeId, setSelectedTrade, setHoveredTrade } =
@@ -373,8 +397,210 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
   const handleRunBacktest = (req: BacktestRequest) => {
     setSelectedTrade(null);
+    setIsReplayMode(false);
+    setIsReplayPlaying(false);
+    setIsReplayFollowOn(true);
+    setIsZoomPaused(false);
+    
+    const startDate = new Date(req.from).getTime();
+    const startIndex = candles.findIndex((c) => new Date(c.timestamp).getTime() >= startDate);
+    const initialIndex = Math.max(0, startIndex);
+    setReplayStartIndex(initialIndex);
+    setReplayIndex(initialIndex);
+    
+    setReplayEvents([]);
+    setActiveReplayEvent(null);
+    replayEntrySeenRef.current.clear();
+    replayExitSeenRef.current.clear();
     setBacktestRequest(req);
   };
+
+  const replaySourceCandles = candles;
+  const replayTotalCandles = replaySourceCandles.length;
+
+  const replayNowMs = useMemo(() => {
+    if (!isReplayMode || !backtestResult || replayTotalCandles === 0) return null;
+    const safeIndex = Math.min(Math.max(replayIndex, 0), replayTotalCandles - 1);
+    return new Date(replaySourceCandles[safeIndex].timestamp).getTime();
+  }, [isReplayMode, backtestResult, replayIndex, replaySourceCandles, replayTotalCandles]);
+
+  const allBacktestTrades = backtestResult?.trades ?? [];
+
+  const visibleTrades = useMemo(() => {
+    if (!isReplayMode || replayNowMs === null) return allBacktestTrades;
+    return allBacktestTrades.filter((trade) => new Date(trade.entryTime).getTime() <= replayNowMs);
+  }, [allBacktestTrades, isReplayMode, replayNowMs]);
+
+  const exitedTrades = useMemo(() => {
+    if (!isReplayMode || replayNowMs === null) return allBacktestTrades;
+    return allBacktestTrades.filter((trade) => new Date(trade.exitTime).getTime() <= replayNowMs);
+  }, [allBacktestTrades, isReplayMode, replayNowMs]);
+
+  const runningPnl = useMemo(
+    () => exitedTrades.reduce((sum: number, trade: BacktestTrade) => sum + trade.pnl, 0),
+    [exitedTrades]
+  );
+
+  const visibleEquityCurve = useMemo(() => {
+    const fullCurve = backtestResult?.metrics.equityCurve ?? [];
+    if (!isReplayMode || replayNowMs === null || !fullCurve.length) return fullCurve;
+
+    const filtered = fullCurve.filter((point: EquityPoint) => new Date(point.timestamp).getTime() <= replayNowMs);
+    return filtered.length ? filtered : [fullCurve[0]];
+  }, [backtestResult?.metrics.equityCurve, isReplayMode, replayNowMs]);
+
+  const resetReplay = () => {
+    setIsReplayPlaying(false);
+    setIsReplayFollowOn(true);
+    setIsZoomPaused(false);
+    setReplayIndex(replayStartIndex);
+    setReplayEvents([]);
+    setActiveReplayEvent(null);
+    replayEntrySeenRef.current.clear();
+    replayExitSeenRef.current.clear();
+  };
+
+  useEffect(() => {
+    if (!backtestResult || replayTotalCandles === 0) return;
+    setIsReplayMode(false);
+    setIsReplayPlaying(false);
+    setIsReplayFollowOn(true);
+    setIsZoomPaused(false);
+    setReplayIndex(replayStartIndex);
+    setReplayEvents([]);
+    setActiveReplayEvent(null);
+    replayEntrySeenRef.current.clear();
+    replayExitSeenRef.current.clear();
+  }, [backtestResult, replayTotalCandles, replayStartIndex]);
+
+  useEffect(() => {
+    if (!isReplayMode || !isReplayPlaying || replayTotalCandles <= 1) return;
+
+    const STEP_MS = 450;
+    const tick = (ts: number) => {
+      if (!isReplayPlaying) return;
+
+      if (replayLastTsRef.current === null) {
+        replayLastTsRef.current = ts;
+      }
+
+      const delta = ts - (replayLastTsRef.current ?? ts);
+      replayLastTsRef.current = ts;
+      replayAccumulatorRef.current += delta * replaySpeed;
+
+      let steps = 0;
+      while (replayAccumulatorRef.current >= STEP_MS) {
+        replayAccumulatorRef.current -= STEP_MS;
+        steps += 1;
+      }
+
+      if (steps > 0) {
+        let reachedEnd = false;
+        setReplayIndex((prev) => {
+          const next = Math.min(prev + steps, replayTotalCandles - 1);
+          reachedEnd = next >= replayTotalCandles - 1;
+          return next;
+        });
+
+        if (reachedEnd) {
+          setIsReplayPlaying(false);
+          return;
+        }
+      }
+
+      replayFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    replayFrameRef.current = window.requestAnimationFrame(tick);
+
+    return () => {
+      if (replayFrameRef.current !== null) {
+        window.cancelAnimationFrame(replayFrameRef.current);
+        replayFrameRef.current = null;
+      }
+    };
+  }, [isReplayMode, isReplayPlaying, replaySpeed, replayTotalCandles]);
+
+  useEffect(() => {
+    if (isReplayPlaying) return;
+    replayLastTsRef.current = null;
+    replayAccumulatorRef.current = 0;
+    if (replayFrameRef.current !== null) {
+      window.cancelAnimationFrame(replayFrameRef.current);
+      replayFrameRef.current = null;
+    }
+  }, [isReplayPlaying]);
+
+  useEffect(() => {
+    if (!isReplayMode || replayNowMs === null || !backtestResult) return;
+
+    const nextEvents: ReplayEvent[] = [];
+
+    for (const trade of backtestResult.trades) {
+      const entryMs = new Date(trade.entryTime).getTime();
+      const exitMs = new Date(trade.exitTime).getTime();
+
+      if (entryMs <= replayNowMs && !replayEntrySeenRef.current.has(trade.id)) {
+        replayEntrySeenRef.current.add(trade.id);
+        const risk = Math.abs(trade.entryPrice - trade.stopLoss);
+        const reward = Math.abs(trade.target - trade.entryPrice);
+        const riskReward = risk > 0 ? (reward / risk).toFixed(2) : 'N/A';
+        const qty = trade.quantity ? ` @ ${trade.quantity} qty` : '';
+        nextEvents.push({
+          id: `${trade.id}:entry`,
+          type: 'trade_placed',
+          tradeId: trade.id,
+          at: trade.entryTime,
+          message: `Entry: ${trade.tradeType} @ ${formatPrice(trade.entryPrice)} | RR: ${riskReward}${qty}`,
+        });
+      }
+
+      if (exitMs <= replayNowMs && !replayExitSeenRef.current.has(trade.id)) {
+        replayExitSeenRef.current.add(trade.id);
+        const pnlText = `${trade.pnl >= 0 ? '+' : ''}${formatPrice(trade.pnl)}`;
+        const risk = Math.abs(trade.entryPrice - trade.stopLoss);
+        const realizedReward = Math.abs(trade.exitPrice - trade.entryPrice);
+        const rrRealized = risk > 0 ? (realizedReward / risk).toFixed(2) : 'N/A';
+        nextEvents.push({
+          id: `${trade.id}:exit`,
+          type: 'trade_exited',
+          tradeId: trade.id,
+          at: trade.exitTime,
+          message: `Exit @ ${formatPrice(trade.exitPrice)} | ${trade.pnl >= 0 ? 'Profit' : 'Loss'}: ${pnlText} | Realized RR: ${rrRealized}`,
+        });
+      }
+    }
+
+    if (!nextEvents.length) return;
+
+    nextEvents.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+    const latest = nextEvents[nextEvents.length - 1];
+
+    setReplayEvents((prev) => [...nextEvents.reverse(), ...prev].slice(0, 20));
+    setActiveReplayEvent(latest);
+
+    if (replayEventClearRef.current !== null) {
+      window.clearTimeout(replayEventClearRef.current);
+    }
+    replayEventClearRef.current = window.setTimeout(() => setActiveReplayEvent(null), 1800);
+  }, [isReplayMode, replayNowMs, backtestResult]);
+
+  useEffect(() => {
+    if (!selectedTradeId || !isReplayMode) return;
+    if (visibleTrades.some((trade) => trade.id === selectedTradeId)) return;
+    setSelectedTrade(null);
+  }, [isReplayMode, selectedTradeId, setSelectedTrade, visibleTrades]);
+
+  useEffect(() => {
+    return () => {
+      if (replayEventClearRef.current !== null) {
+        window.clearTimeout(replayEventClearRef.current);
+      }
+      if (replayFrameRef.current !== null) {
+        window.cancelAnimationFrame(replayFrameRef.current);
+      }
+    };
+  }, []);
 
   const TABS: { id: Tab; label: string; icon: ElementType }[] = [
     { id: 'analysis', label: 'Chart Analysis', icon: BarChart2 },
@@ -566,7 +792,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
         </div>
 
         {analysisData && activeTab === 'analysis' && (
-          <div className="bg-[#12121a]/60 border border-gray-800/50 rounded-lg px-4 py-2 flex items-center gap-3 w-fit">
+          <div className="bg-[#12121a]/60 border border-gray-800/50 rounded-lg px-6 py-2 flex items-center gap-3 w-fit">
             <div className="flex flex-col items-center gap-0.5">
               <p className="text-gray-500 text-[10px] uppercase tracking-wide">Trend</p>
               <p className="text-gray-100 font-semibold text-xs">{trendDisplayState.replace('_', ' ')}</p>
@@ -1006,32 +1232,220 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                     </p>
                   </div>
                 ) : (
-                  <div className="flex flex-col lg:flex-row gap-4">
-                    <div className="flex-1 min-w-0">
-                      <BacktestChart
-                        candles={candles}
-                        indicators={indicators}
-                        trades={backtestResult.trades}
-                        selectedTradeId={selectedTradeId}
-                        hoveredTradeId={hoveredTradeId}
-                        onTradeSelect={setSelectedTrade}
-                        onTradeHover={setHoveredTrade}
-                      />
+                  <div className="space-y-3">
+                    <div className="bg-[#12121a]/50 border border-gray-800/50 rounded-xl p-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setIsReplayMode(true);
+                            setIsReplayFollowOn(true);
+                            setIsZoomPaused(false);
+                            setSelectedTrade(null);
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold border transition ${
+                            isReplayMode
+                              ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                              : 'bg-gray-900/40 text-gray-400 border-gray-700/60 hover:text-white'
+                          }`}
+                        >
+                          Replay Mode
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsReplayMode(false);
+                            setIsReplayPlaying(false);
+                            setIsZoomPaused(false);
+                            setActiveReplayEvent(null);
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold border transition ${
+                            !isReplayMode
+                              ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                              : 'bg-gray-900/40 text-gray-400 border-gray-700/60 hover:text-white'
+                          }`}
+                        >
+                          Static Mode
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => {
+                            if (!isReplayPlaying) {
+                              setIsZoomPaused(false);
+                            }
+                            setIsReplayPlaying((prev) => !prev);
+                          }}
+                          disabled={!isReplayMode || replayTotalCandles <= 1}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold border border-indigo-500/30 text-indigo-200 bg-indigo-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {isReplayPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                          {isReplayPlaying ? 'Pause' : 'Play'}
+                        </button>
+
+                        <button
+                          onClick={resetReplay}
+                          disabled={!isReplayMode}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold border border-gray-700/70 text-gray-300 bg-gray-900/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Reset
+                        </button>
+
+                        {[0.5, 1, 2, 5].map((speed) => (
+                          <button
+                            key={speed}
+                            onClick={() => setReplaySpeed(speed as ReplaySpeed)}
+                            disabled={!isReplayMode}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition ${
+                              replaySpeed === speed
+                                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                                : 'bg-gray-900/30 text-gray-400 border-gray-700/60 hover:text-white'
+                            }`}
+                          >
+                            {speed}x
+                          </button>
+                        ))}
+
+                        {isReplayMode && isZoomPaused && !isReplayPlaying && (
+                          <span className="text-xs px-2 py-1 rounded-md border text-amber-200 bg-amber-500/10 border-amber-500/30">
+                            Paused (Zoom)
+                          </span>
+                        )}
+
+                        {isReplayMode && (
+                          <span className="text-xs text-gray-400 px-2">
+                            Candle {Math.min(replayIndex + 1, Math.max(1, replayTotalCandles))} / {Math.max(1, replayTotalCandles)}
+                          </span>
+                        )}
+
+                        {isReplayMode && (
+                          <button
+                            onClick={() => setIsReplayFollowOn((prev) => !prev)}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition ${
+                              isReplayFollowOn
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                : 'bg-gray-900/30 text-gray-400 border-gray-700/60 hover:text-white'
+                            }`}
+                          >
+                            Follow {isReplayFollowOn ? 'On' : 'Off'}
+                          </button>
+                        )}
+
+                        {isReplayMode && (
+                          <span className={`text-xs px-2 py-1 rounded-md border ${runningPnl >= 0 ? 'text-green-300 bg-green-500/10 border-green-500/30' : 'text-red-300 bg-red-500/10 border-red-500/30'}`}>
+                            Running PnL: {formatPrice(runningPnl)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="w-full lg:w-80 xl:w-96 lg:h-[540px]">
-                      <TradeListPanel
-                        trades={backtestResult.trades}
-                        selectedTradeId={selectedTradeId}
-                        hoveredTradeId={hoveredTradeId}
-                        onSelectTrade={setSelectedTrade}
-                        onHoverTrade={setHoveredTrade}
-                      />
+
+                    {isReplayMode && replayTotalCandles > 1 && (
+                      <div className="bg-[#12121a]/50 border border-gray-800/50 rounded-xl p-3">
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs text-gray-400 font-medium whitespace-nowrap">Scrub to:</label>
+                          <input
+                            type="range"
+                            min="0"
+                            max={replayTotalCandles - 1}
+                            value={replayIndex}
+                            onChange={(e) => {
+                              setIsReplayPlaying(false);
+                              setIsZoomPaused(false);
+                              setReplayIndex(parseInt(e.target.value, 10));
+                            }}
+                            disabled={isReplayPlaying}
+                            className="flex-1 h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{
+                              background: `linear-gradient(to right, rgb(99, 102, 241) 0%, rgb(99, 102, 241) ${
+                                (replayIndex / Math.max(1, replayTotalCandles - 1)) * 100
+                              }%, rgb(31, 41, 55) ${(replayIndex / Math.max(1, replayTotalCandles - 1)) * 100}%, rgb(31, 41, 55) 100%)`
+                            }}
+                          />
+                          <span className="text-xs text-gray-500 whitespace-nowrap">{replayIndex + 1} / {replayTotalCandles}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col lg:flex-row gap-4">
+                      <div className="relative flex-1 min-w-0">
+                        <BacktestChart
+                          candles={candles}
+                          indicators={indicators}
+                          trades={isReplayMode ? visibleTrades : backtestResult.trades}
+                          selectedTradeId={selectedTradeId}
+                          hoveredTradeId={hoveredTradeId}
+                          onTradeSelect={setSelectedTrade}
+                          onTradeHover={setHoveredTrade}
+                          replayNowMs={isReplayMode ? replayNowMs : null}
+                          replayIndex={replayIndex}
+                          replayFollowEnabled={isReplayMode && isReplayFollowOn}
+                          isReplayPlaying={isReplayMode && isReplayPlaying}
+                          onReplayPauseFromZoom={() => {
+                            setIsReplayPlaying(false);
+                            setIsZoomPaused(true);
+                          }}
+                        />
+
+                        <AnimatePresence>
+                          {isReplayMode && activeReplayEvent && (
+                            <motion.div
+                              key={activeReplayEvent.id}
+                              initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                              transition={{ duration: 0.16 }}
+                              className="absolute top-3 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-lg border border-indigo-500/30 bg-[#101225]/90 text-xs text-indigo-100 shadow-lg"
+                            >
+                              {activeReplayEvent.message}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      <div className="w-full lg:w-80 xl:w-96 lg:h-[540px] flex flex-col gap-3">
+                        {isReplayMode && (
+                          <div className="bg-[#12121a]/60 border border-gray-800/50 rounded-xl p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-300">Replay Events</h4>
+                              <span className="text-[11px] text-gray-500">{replayEvents.length} events</span>
+                            </div>
+                            <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                              {replayEvents.length === 0 ? (
+                                <p className="text-xs text-gray-500">Press play to see trade placed/exited events.</p>
+                              ) : (
+                                replayEvents.map((event) => (
+                                  <div
+                                    key={event.id}
+                                    className={`text-xs rounded-md px-2 py-1 border ${
+                                      event.type === 'trade_placed'
+                                        ? 'border-sky-500/30 bg-sky-500/10 text-sky-200'
+                                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                    }`}
+                                  >
+                                    {event.message}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex-1 min-h-0">
+                          <TradeListPanel
+                            trades={isReplayMode ? visibleTrades : backtestResult.trades}
+                            selectedTradeId={selectedTradeId}
+                            hoveredTradeId={hoveredTradeId}
+                            onSelectTrade={setSelectedTrade}
+                            onHoverTrade={setHoveredTrade}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {backtestResult.metrics.equityCurve?.length > 0 && (
-                  <EquityCurve equityCurve={backtestResult.metrics.equityCurve} />
+                {(isReplayMode ? visibleEquityCurve : backtestResult.metrics.equityCurve)?.length > 0 && (
+                  <EquityCurve equityCurve={isReplayMode ? visibleEquityCurve : backtestResult.metrics.equityCurve} />
                 )}
               </>
             )}

@@ -113,28 +113,35 @@ export const EquityCurve = ({ equityCurve }: EquityCurveProps) => {
     };
   }, []);
 
-  // Set equity curve data
+  // Set equity curve data — deduplicate timestamps (last value wins) then sort ascending
   useEffect(() => {
     if (!equitySeriesRef.current || !equityCurve.length) return;
 
-    const data: LineData[] = equityCurve.map((p) => ({
-      time: toUTC(p.timestamp),
-      value: p.equity,
-    }));
+    const deduped = new Map<number, LineData>();
+    equityCurve.forEach((p) => {
+      const t = toUTC(p.timestamp);
+      deduped.set(t as number, { time: t, value: p.equity });
+    });
+
+    const data: LineData[] = Array.from(deduped.values()).sort(
+      (a, b) => (a.time as number) - (b.time as number)
+    );
 
     equitySeriesRef.current.setData(data);
     equityChartRef.current?.timeScale().fitContent();
   }, [equityCurve]);
 
-  // Set daily PnL data
+  // Set daily PnL data — sort ascending to satisfy lightweight-charts requirement
   useEffect(() => {
     if (!pnlSeriesRef.current || !dailyPnl.length) return;
 
-    const data: HistogramData[] = dailyPnl.map((d) => ({
-      time: (new Date(d.date).getTime() / 1000) as UTCTimestamp,
-      value: d.value,
-      color: d.value >= 0 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
-    }));
+    const data: HistogramData[] = dailyPnl
+      .map((d) => ({
+        time: (new Date(d.date).getTime() / 1000) as UTCTimestamp,
+        value: d.value,
+        color: d.value >= 0 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
+      }))
+      .sort((a, b) => (a.time as number) - (b.time as number));
 
     pnlSeriesRef.current.setData(data);
     pnlChartRef.current?.timeScale().fitContent();

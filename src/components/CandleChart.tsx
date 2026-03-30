@@ -13,6 +13,7 @@ import {
   createSeriesMarkers,
 } from 'lightweight-charts';
 import { Candle, Indicators } from '../services/api';
+import { formatUTCToIST, formatUTCToISTFull } from '../utils/formatters';
 
 interface CandleChartProps {
   candles: Candle[];
@@ -75,6 +76,9 @@ export const CandleChart = ({
         secondsVisible: false,
         borderColor: '#374151',
       },
+      localization: {
+        timeFormatter: (utcTimestamp: number) => formatUTCToIST(utcTimestamp),
+      } as any,
       rightPriceScale: {
         borderColor: '#374151',
         scaleMargins: {
