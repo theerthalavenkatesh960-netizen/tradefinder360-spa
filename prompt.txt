@@ -1,293 +1,210 @@
-I have a stock analysis and backtesting app built with React, TypeScript, Tailwind CSS, and lightweight-charts v5. I want to make two major improvements. Here are all the files for context: [paste all your files — StockDetail.tsx, CandleChart.tsx, BacktestChart.tsx, BacktestControls.tsx, BacktestMetrics.tsx, EquityCurve.tsx, TradeListPanel.tsx]
+You are upgrading an existing React trading chart component built using lightweight-charts.
 
-Fix 1 — React hooks error in StockDetail.tsx
-The component throws Rendered more hooks than during the previous render because there is an early return if (!stock) { return <spinner /> } that sits between hooks. Fix this by splitting into two components in the same file:
+IMPORTANT:
+- DO NOT remove existing logic
+- DO NOT break current props or API usage
+- EXTEND the current CandleChart to look and behave like TradingView
 
-StockDetail (exported, outer wrapper) — contains only useParams and the single useQuery for stock. Shows spinner if !stock, otherwise renders <StockDetailInner stock={stock} symbol={symbol} />.
-StockDetailInner (inner, not exported) — receives stock and symbol as props. Contains ALL remaining hooks, handlers, and JSX exactly as-is. Do not change any logic, imports, or variable names.
+---------------------------------------
+🎯 GOAL
+---------------------------------------
 
+Transform the existing chart into a TradingView-like professional interface with:
 
-Fix 2 — Make the Analysis panel world-class for trade decision making
-Enhance the right-side analysis panel in StockDetail (the panel that shows when showAnalysis is true) to include ALL of the following sections. Use the existing analysis and indicators data already fetched. Add new API calls only if the data genuinely doesn't exist in current responses.
-Sections to add:
-A. Trend Summary Card
+- Premium UI
+- Advanced overlays
+- Smooth interactions
+- Better data visualization
 
-Large trend state badge (STRONG_UP / WEAK_UP / SIDEWAYS / WEAK_DOWN / STRONG_DOWN) with color coding
-Setup score progress bar (0–100) with color: green >70, amber 40–70, red <40
-EMA alignment status: show if Fast EMA > Slow EMA (bullish) or Fast < Slow (bearish)
-Price position relative to EMA: above/below both EMAs
+---------------------------------------
+🎨 VISUAL DESIGN (VERY IMPORTANT)
+---------------------------------------
 
-B. Entry Guidance Card (only show if direction !== 'NONE')
+Use a DARK PRO TRADING THEME:
 
-Direction badge (LONG / SHORT) prominently
-Entry price, Stop Loss (red), Target (green) in a clean grid
-R:R ratio displayed as 1 : X.XX
-Risk amount in % if price moves to SL
-A visual mini price ladder showing Entry / SL / Target as horizontal bars proportionally spaced
+- Background: #0a0a0f
+- Panels: rgba(255,255,255,0.04)
+- Borders: rgba(255,255,255,0.08)
+- Text: #d1d5db
+- Secondary text: #6b7280
 
-C. Momentum Card
+Typography:
+- Font: Inter / system-ui
+- Small labels: 11px
+- Main: 13–14px
 
-RSI value with color: green <40 (oversold), red >70 (overbought), grey otherwise
-RSI trend: rising / falling based on last 3 values
-MACD: show if histogram is positive or negative, and if it just crossed
-Volume: current vs 20-period average (above/below average indicator)
+Add:
+- Glassmorphism cards (backdrop-blur)
+- Soft glow highlights on hover
+- Smooth transitions (0.2–0.3s ease)
 
-D. Key Levels Card
+---------------------------------------
+📊 CHART IMPROVEMENTS
+---------------------------------------
 
-Bollinger Upper, Middle, Lower prices
-Distance from current price to each band in %
-Whether price is outside bands (squeeze signal)
+Enhance the EXISTING chart:
 
-E. Signal Strength Summary
+1. Crosshair Upgrade
+- Show floating tooltip on hover
+- Display:
+  - Time (IST formatted)
+  - Open, High, Low, Close
+  - % change
+  - Volume (if available)
 
-A composite 0–10 score synthesised from: trend alignment + RSI position + MACD direction + price vs EMA
-Show as a large number with a coloured ring around it
-Below it: list which signals are bullish (green check) and which are bearish (red cross)
+2. Price Line Highlight
+- Highlight current price with glowing line
+- Show price label on right scale
 
-Use the existing indicators array (last element = most recent) for all computed values. Keep the dark theme consistent with the rest of the app (#12121a, #0a0a0f, indigo accents).
+3. Grid & Axis Polish
+- Reduce noise
+- Subtle grid lines
+- Improve spacing
 
-Fix 3 — Make BacktestChart trade visualization the best possible
-Completely rework how trades are displayed on the BacktestChart. Replace the current box drawing approach with the following:
-Trade visualization requirements:
-A. Entry-to-Exit swim lane
+---------------------------------------
+📦 TRADE VISUALIZATION (VERY IMPORTANT)
+---------------------------------------
 
-Draw a horizontal arrow/line from entry candle to exit candle at the entry price level
-Color: indigo for LONG, orange for SHORT
-At entry point: draw a filled triangle marker (up for LONG, down for SHORT) in green/red
-At exit point: draw a circle marker colored green (win) or red (loss)
-The line should be on the price axis at the exact entry price, making it easy to follow the trade
+Add visual overlays for trade:
 
-B. SL and Target bands
+1. Entry Line
+- Blue glowing line
 
-Draw a semi-transparent filled rectangle from entry time to exit time
-Top of rect = Target price, Bottom of rect = Stop Loss price
-Fill color: green tint (rgba 34,197,94, 0.06) for wins, red tint for losses
-Dashed horizontal lines for SL (red dashed) and Target (green dashed) within the rect
+2. Stop Loss Line
+- Red line
+- Add shaded red zone below entry
 
-C. Selected trade highlight
+3. Target Line
+- Green line
+- Add shaded green zone above entry
 
-When a trade is selected, increase opacity of its rect to 0.18
-Draw the entry price line in bright indigo (solid, 1.5px)
-Add price labels on the right axis: "Entry", "SL", "Target" (already done via price lines — keep this)
-Scroll to center the trade in view (already done — keep this)
+4. Risk/Reward Box
+- Draw rectangle between SL → Entry → Target
+- Show RR ratio (e.g. 1:3)
 
-D. Hovered trade tooltip
+---------------------------------------
+📈 PROFIT BAR (NEW COMPONENT)
+---------------------------------------
 
-Keep existing TradeTooltip component but reposition it to always stay within viewport bounds (clamp left and top so it never goes off-screen)
-Add a "Duration" human-readable label (e.g. "2h 30m")
+Add a horizontal profit visualization bar above chart:
 
-E. Trade count badge
+- Left (red): Risk
+- Right (green): Reward
+- Middle marker: Entry
 
-Top-right corner of chart: show "X trades | Y wins | Z losses" as a small pill badge
+Animate fill based on RR
 
-F. Performance
+---------------------------------------
+🧠 TRADE PROBABILITY METER
+---------------------------------------
 
-Keep the existing RAF + ref pattern for drawBoxes
-After drawing rects, draw the entry-to-exit lines in a second pass so lines always render on top of rects
+Add circular gauge:
 
+- Range: 0–100%
+- Color:
+  - Red (<40)
+  - Yellow (40–70)
+  - Green (>70)
 
-Fix 4 — Enhance BacktestMetricsBar
-Add these additional metric cards to the existing 6-card grid (extend to 9 cards, wrap to 3 rows on mobile):
+Use:
+- RSI
+- Trend (EMA alignment)
+- MACD
 
-Sharpe Ratio — metrics.sharpeRatio — show as number, green if >1, amber if 0.5–1, red if <0.5. Sub-label: "risk-adjusted"
-Avg Trade Duration — metrics.avgTradeDurationMinutes — format as "Xh Ym". Sub-label: "per trade"
-Expectancy — metrics.expectancy — formatPrice. Sub-label: "per trade avg". Green if positive.
+Combine into score
 
-If these fields don't exist on BacktestMetrics type yet, add them as optional (sharpeRatio?: number, avgTradeDurationMinutes?: number, expectancy?: number) and show "—" if undefined.
+---------------------------------------
+📊 INDICATOR PANELS (LIKE TRADINGVIEW)
+---------------------------------------
 
-Fix 5 — TradeListPanel improvements
+Split chart into sections:
 
-Add a summary stats row at the top below the W/L count: show Total PnL (green/red), Best trade (green), Worst trade (red) as three inline pills
-Add keyboard navigation: when a trade row is selected, pressing ArrowUp/ArrowDown should select the previous/next visible trade in the filtered+sorted list
-The existing scroll-into-view on selection is correct — keep it
+- Main: Candles + EMA + Bollinger
+- Bottom 1: RSI panel
+- Bottom 2: MACD panel
 
+Each panel:
+- Independent scale
+- Clean separators
 
-General rules for all changes:
+---------------------------------------
+🧭 SIDEBAR (LEFT)
+---------------------------------------
 
-Preserve all existing functionality exactly
-Keep the dark theme (#0a0a0f, #12121a, #1a1a2e, gray-800 borders, indigo-500 accents)
-No new dependencies — use only what's already imported (framer-motion, lucide-react, lightweight-charts, date-fns)
-TypeScript strict — no any types
-Do not change API service files or store files
+Add floating sidebar with icons:
 
+- 📈 Indicators toggle
+- 🎯 Draw tools (future)
+- 🔍 Zoom reset
+- ⚙ Settings
 
-{
-  "instrumentKey": "NSE_EQ|INE040A01034",
-  "symbol": "HDFCBANK",
-  "exchange": "NSE",
-  "indicators": {
-    "emaFast": 763.8521,
-    "emaSlow": 764.6645,
-    "rsi": 56.7967,
-    "macdLine": 2.7354,
-    "macdSignal": 2.7371,
-    "macdHistogram": -0.0018,
-    "adx": 28.4258,
-    "plusDI": 22.5181,
-    "minusDI": 17.7424,
-    "atr": 4.1568,
-    "bollingerUpper": 775.0118,
-    "bollingerMiddle": 763.5325,
-    "bollingerLower": 752.0532,
-    "vwap": 761.7835,
-    "timestamp": "2026-03-24T09:45:00+00:00"
-  },
-  "trendState": {
-    "state": "TRENDING_BEARISH",
-    "bias": "BEARISH",
-    "setupScore": 67,
-    "qualityLabel": "WATCHLIST",
-    "scoreBreakdown": {
-      "adx": 20,
-      "rsi": 10,
-      "emaVwap": 14,
-      "volume": 15,
-      "bollinger": 8,
-      "structure": 0,
-      "total": 67
-    }
-  },
-  "entryGuidance": null,
-  "confidence": 67,
-  "explanation": "No active recommendation — market state is TRENDING_BEARISH, not PULLBACK_READY",
-  "reasoningPoints": [],
-  "analysedAt": "2026-03-27T07:31:40.98648+00:00"
-}
+Style:
+- Vertical glass panel
+- Icons only
+- Highlight active
 
+---------------------------------------
+🎛 TOP BAR
+---------------------------------------
 
+Add top control bar:
 
-I need to upgrade the instrument analysis API response to support advanced trading decision UI in my React app.
+- Symbol name (e.g. NIFTY 50)
+- Timeframe selector (1m, 5m, 15m)
+- Toggle indicators:
+  - EMA
+  - RSI
+  - MACD
+  - Bollinger
 
-Current response already includes:
+---------------------------------------
+✨ ANIMATIONS
+---------------------------------------
 
-instrumentKey, symbol, exchange
-indicators (emaFast, emaSlow, rsi, macdLine, macdSignal, macdHistogram, adx, plusDI, minusDI, atr, bollingerUpper, bollingerMiddle, bollingerLower, vwap, timestamp)
-trendState (state, bias, setupScore, qualityLabel, scoreBreakdown)
-entryGuidance (nullable)
-confidence, explanation, reasoningPoints, analysedAt
-Please extend the response with the following fields while keeping full backward compatibility.
+- Smooth chart updates
+- Fade-in indicators
+- Hover glow effects
+- Tooltip transitions
 
-Entry guidance diagnostics (when entryGuidance is null)
-Add an object named noTradeContext:
-whyNoTradeCode: string enum
-NOT_PULLBACK_READY
-LOW_VOLUME
-WEAK_TREND
-RISK_TOO_HIGH
-CONFLICTING_SIGNALS
-OUTSIDE_TRADING_WINDOW
-OTHER
-whyNoTradeMessage: string (human-readable reason)
-nextTriggerPrice: number | null
-nextTriggerCondition: string | null
-estimatedRecheckMinutes: number | null
-invalidatesAt: string | null (ISO datetime)
-Volume diagnostics
-Add object volumeContext:
-currentVolume: number
-volume20Avg: number
-relativeVolume: number (currentVolume / volume20Avg)
-deliveryVolumeRatio: number | null
-isAboveAverage: boolean
-Structure and key levels
-Add object structureLevels:
-sessionHigh: number | null
-sessionLow: number | null
-previousDayHigh: number | null
-previousDayLow: number | null
-nearestSupport: number | null
-nearestResistance: number | null
-pivot: number | null
-r1: number | null
-s1: number | null
-Signal timing and freshness
-Add object signalTiming:
-signalAgeBars: number | null
-barsSinceMacdCross: number | null
-barsSinceRsiZoneExit: number | null
-signalFreshnessScore: number (0-100)
-Market regime
-Add object marketRegime:
-volatilityRegime: string enum (LOW, NORMAL, HIGH)
-trendStrengthScore: number (0-100)
-rangeCompressionScore: number (0-100)
-momentumQualityScore: number (0-100)
-Optional guidance quality fields
-Inside entryGuidance (if non-null), add:
-confidenceBreakdown:
-trend: number
-momentum: number
-volume: number
-structure: number
-volatility: number
-total: number
-expectedHoldingMinutes: number | null
-maxAdverseExcursionPct: number | null
-maxFavorableExcursionPct: number | null
-Rules
+---------------------------------------
+⚡ PERFORMANCE RULES
+---------------------------------------
 
-Do not remove or rename existing fields.
-Keep existing semantics unchanged.
-New fields should be nullable where data is unavailable.
-All timestamps must be ISO 8601.
-Numeric fields must be numbers (not strings).
-Response should remain stable across symbols/timeframes.
-Please also provide:
+- Do NOT recreate chart on every render
+- Use refs properly
+- Memoize heavy calculations
+- Only update changed series
 
-Updated OpenAPI schema for this response
-One sample response where entryGuidance is null
-One sample response where entryGuidance is present
-Optional target response shape example
+---------------------------------------
+📁 STRUCTURE
+---------------------------------------
 
-{
-"instrumentKey": "NSE_EQ|INE040A01034",
-"symbol": "HDFCBANK",
-"exchange": "NSE",
-"indicators": {},
-"trendState": {},
-"entryGuidance": null,
-"noTradeContext": {
-"whyNoTradeCode": "NOT_PULLBACK_READY",
-"whyNoTradeMessage": "No active recommendation for current trend phase",
-"nextTriggerPrice": 768.2,
-"nextTriggerCondition": "Price closes above EMA fast with rising MACD histogram",
-"estimatedRecheckMinutes": 15,
-"invalidatesAt": null
-},
-"volumeContext": {
-"currentVolume": 184200,
-"volume20Avg": 156800,
-"relativeVolume": 1.17,
-"deliveryVolumeRatio": null,
-"isAboveAverage": true
-},
-"structureLevels": {
-"sessionHigh": 770.1,
-"sessionLow": 758.4,
-"previousDayHigh": 772.0,
-"previousDayLow": 755.8,
-"nearestSupport": 759.5,
-"nearestResistance": 769.8,
-"pivot": 763.9,
-"r1": 771.3,
-"s1": 756.5
-},
-"signalTiming": {
-"signalAgeBars": 2,
-"barsSinceMacdCross": 1,
-"barsSinceRsiZoneExit": 4,
-"signalFreshnessScore": 78
-},
-"marketRegime": {
-"volatilityRegime": "NORMAL",
-"trendStrengthScore": 67,
-"rangeCompressionScore": 42,
-"momentumQualityScore": 61
-},
-"confidence": 67,
-"explanation": "No active recommendation — market state is TRENDING_BEARISH, not PULLBACK_READY",
-"reasoningPoints": [],
-"analysedAt": "2026-03-27T07:31:40.98648+00:00"
-}
+Refactor into components:
 
-If you want, I can also give you a second prompt specifically for SQL/EF model changes and migration-safe rollout steps.
+- CandleChart (core chart)
+- TradeOverlay
+- ProfitBar
+- ProbabilityMeter
+- ChartToolbar
+- Sidebar
+
+---------------------------------------
+🚫 DO NOT BREAK
+---------------------------------------
+
+- Existing API structure
+- Candle format
+- Indicators format
+- Marker logic (buy/sell)
+
+---------------------------------------
+🎯 OUTPUT
+---------------------------------------
+
+Return full updated React code with:
+- Clean structure
+- Modular components
+- Professional UI
+- Fully working chart
+
+Make it look like a paid SaaS trading platform.

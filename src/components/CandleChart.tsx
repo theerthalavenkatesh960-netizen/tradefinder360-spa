@@ -13,7 +13,7 @@ import {
   createSeriesMarkers,
 } from 'lightweight-charts';
 import { Candle, Indicators } from '../services/api';
-import { formatUTCToIST, formatUTCToISTFull } from '../utils/formatters';
+import { formatUTCToIST } from '../utils/formatters';
 
 interface CandleChartProps {
   candles: Candle[];
@@ -42,6 +42,7 @@ export const CandleChart = ({
 }: CandleChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const emaFastSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const emaSlowSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -54,9 +55,18 @@ export const CandleChart = ({
   const macdLineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdSignalSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdHistogramSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
-  const toUTCTimestamp = (date: string | number | Date): UTCTimestamp =>
-  (new Date(date).getTime() / 1000) as UTCTimestamp;
 
+  const toUTCTimestamp = (date: string | number | Date): UTCTimestamp =>
+    (new Date(date).getTime() / 1000) as UTCTimestamp;
+
+  // ✅ ONE CLEAN UTILITY
+  const uniqueByTime = <T extends { time: number }>(data: T[]): T[] => {
+    const map = new Map<number, T>();
+    data.forEach((d) => map.set(d.time, d));
+    return Array.from(map.values()).sort((a, b) => a.time - b.time);
+  };
+
+  // 🚀 INIT CHART
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -77,27 +87,16 @@ export const CandleChart = ({
         borderColor: '#374151',
       },
       localization: {
-        timeFormatter: (utcTimestamp: number) => formatUTCToIST(utcTimestamp),
+        timeFormatter: (utc: number) => formatUTCToIST(utc),
       } as any,
       rightPriceScale: {
         borderColor: '#374151',
-        scaleMargins: {
-          top: 0.02,
-          bottom: 0.42,
-        },
+        scaleMargins: { top: 0.02, bottom: 0.42 },
       },
       crosshair: {
         mode: 1,
-        vertLine: {
-          color: '#6366f1',
-          width: 1,
-          style: 3,
-        },
-        horzLine: {
-          color: '#6366f1',
-          width: 1,
-          style: 3,
-        },
+        vertLine: { color: '#6366f1', width: 1, style: 3 },
+        horzLine: { color: '#6366f1', width: 1, style: 3 },
       },
     });
 
@@ -110,96 +109,27 @@ export const CandleChart = ({
       wickDownColor: '#ef4444',
     });
 
-    const emaFastSeries = chart.addSeries(LineSeries, {
-      color: '#3b82f6',
-      lineWidth: 2,
-      title: 'EMA Fast',
-    });
+    const emaFastSeries = chart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 2 });
+    const emaSlowSeries = chart.addSeries(LineSeries, { color: '#f97316', lineWidth: 2 });
 
-    const emaSlowSeries = chart.addSeries(LineSeries, {
-      color: '#f97316',
-      lineWidth: 2,
-      title: 'EMA Slow',
-    });
+    const bbUpperSeries = chart.addSeries(LineSeries, { color: '#ef4444', lineStyle: 2 });
+    const bbMiddleSeries = chart.addSeries(LineSeries, { color: '#f59e0b' });
+    const bbLowerSeries = chart.addSeries(LineSeries, { color: '#22c55e', lineStyle: 2 });
 
-    const bbUpperSeries = chart.addSeries(LineSeries, {
-      color: '#ef4444',
-      lineWidth: 1.25,
-      lineStyle: 2,
-      title: 'BB Upper',
-    });
+    const rsiSeries = chart.addSeries(LineSeries, { color: '#8b5cf6', priceScaleId: 'rsi' });
+    const rsiOver = chart.addSeries(LineSeries, { color: '#ef4444', lineStyle: 2, priceScaleId: 'rsi' });
+    const rsiUnder = chart.addSeries(LineSeries, { color: '#22c55e', lineStyle: 2, priceScaleId: 'rsi' });
 
-    const bbMiddleSeries = chart.addSeries(LineSeries, {
-      color: '#f59e0b',
-      lineWidth: 1,
-      lineStyle: 1,
-      title: 'BB Middle',
-    });
-
-    const bbLowerSeries = chart.addSeries(LineSeries, {
-      color: '#22c55e',
-      lineWidth: 1.25,
-      lineStyle: 2,
-      title: 'BB Lower',
-    });
-
-    const rsiSeries = chart.addSeries(LineSeries, {
-      color: '#8b5cf6',
-      lineWidth: 1.4,
-      title: 'RSI',
-      priceScaleId: 'rsi',
-    });
-
-    const rsiOverbought = chart.addSeries(LineSeries, {
-      color: '#ef4444',
-      lineWidth: 1,
-      lineStyle: 2,
-      title: 'RSI 70',
-      priceScaleId: 'rsi',
-    });
-
-    const rsiOversold = chart.addSeries(LineSeries, {
-      color: '#22c55e',
-      lineWidth: 1,
-      lineStyle: 2,
-      title: 'RSI 30',
-      priceScaleId: 'rsi',
-    });
-
-    const macdLineSeries = chart.addSeries(LineSeries, {
-      color: '#22c55e',
-      lineWidth: 1.4,
-      title: 'MACD',
-      priceScaleId: 'macd',
-    });
-
-    const macdSignalSeries = chart.addSeries(LineSeries, {
-      color: '#ef4444',
-      lineWidth: 1.4,
-      title: 'MACD Signal',
-      priceScaleId: 'macd',
-    });
-
-    const macdHistogramSeries = chart.addSeries(HistogramSeries, {
-      title: 'MACD Hist',
-      priceScaleId: 'macd',
-      priceFormat: { type: 'volume' },
-    });
+    const macdLine = chart.addSeries(LineSeries, { color: '#22c55e', priceScaleId: 'macd' });
+    const macdSignal = chart.addSeries(LineSeries, { color: '#ef4444', priceScaleId: 'macd' });
+    const macdHist = chart.addSeries(HistogramSeries, { priceScaleId: 'macd' });
 
     chart.priceScale('rsi').applyOptions({
-      borderColor: '#374151',
-      scaleMargins: {
-        top: 0.62,
-        bottom: 0.2,
-      },
+      scaleMargins: { top: 0.62, bottom: 0.2 },
     });
 
     chart.priceScale('macd').applyOptions({
-      borderColor: '#374151',
-      scaleMargins: {
-        top: 0.82,
-        bottom: 0.02,
-      },
+      scaleMargins: { top: 0.82, bottom: 0.02 },
     });
 
     chartRef.current = chart;
@@ -210,19 +140,17 @@ export const CandleChart = ({
     bbMiddleSeriesRef.current = bbMiddleSeries;
     bbLowerSeriesRef.current = bbLowerSeries;
     rsiSeriesRef.current = rsiSeries;
-    rsiOverboughtRef.current = rsiOverbought;
-    rsiOversoldRef.current = rsiOversold;
-    macdLineSeriesRef.current = macdLineSeries;
-    macdSignalSeriesRef.current = macdSignalSeries;
-    macdHistogramSeriesRef.current = macdHistogramSeries;
+    rsiOverboughtRef.current = rsiOver;
+    rsiOversoldRef.current = rsiUnder;
+    macdLineSeriesRef.current = macdLine;
+    macdSignalSeriesRef.current = macdSignal;
+    macdHistogramSeriesRef.current = macdHist;
 
     const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
-        });
-      }
+      chart.applyOptions({
+        width: chartContainerRef.current!.clientWidth,
+        height: chartContainerRef.current!.clientHeight,
+      });
     };
 
     window.addEventListener('resize', handleResize);
@@ -233,22 +161,24 @@ export const CandleChart = ({
     };
   }, []);
 
+  // 📊 CANDLES
   useEffect(() => {
     if (!candleSeriesRef.current) return;
 
-    const candleData: CandlestickData[] = candles.map((c) => ({
-      time: toUTCTimestamp(c.timestamp),
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-    }));
-
-    candleSeriesRef.current.setData(candleData);
+    candleSeriesRef.current.setData(
+      uniqueByTime(
+        candles.map((c) => ({
+          time: toUTCTimestamp(c.timestamp),
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+        }))
+      )
+    );
   }, [candles]);
 
-  
-
+  // 📈 EMA
   useEffect(() => {
     if (!showEMA || !indicators.length) {
       emaFastSeriesRef.current?.setData([]);
@@ -256,149 +186,98 @@ export const CandleChart = ({
       return;
     }
 
-    const emaFastData: LineData[] = indicators
-      .filter((i) => i.emaFast > 0)
-      .map((i) => ({
+    emaFastSeriesRef.current?.setData(
+      uniqueByTime(indicators.map(i => ({
         time: toUTCTimestamp(i.timestamp),
-        value: i.emaFast,
-      }));
+        value: i.emaFast
+      })))
+    );
 
-    const emaSlowData: LineData[] = indicators
-      .filter((i) => i.emaSlow > 0)
-      .map((i) => ({
+    emaSlowSeriesRef.current?.setData(
+      uniqueByTime(indicators.filter(i => i.emaSlow > 0).map(i => ({
         time: toUTCTimestamp(i.timestamp),
-        value: i.emaSlow,
-      }));
-
-    emaFastSeriesRef.current?.setData(emaFastData);
-    emaSlowSeriesRef.current?.setData(emaSlowData);
+        value: i.emaSlow
+      })))
+    );
   }, [indicators, showEMA]);
 
+  // 📉 BOLLINGER
   useEffect(() => {
-    if (!showBollinger || !indicators.length) {
-      bbUpperSeriesRef.current?.setData([]);
-      bbMiddleSeriesRef.current?.setData([]);
-      bbLowerSeriesRef.current?.setData([]);
-      return;
-    }
+    if (!showBollinger || !indicators.length) return;
 
-    const bbUpperData: LineData[] = indicators
-      .filter((i) => i.bollingerUpper > 0)
-      .map((i) => ({
-        time: toUTCTimestamp(i.timestamp),
-        value: i.bollingerUpper,
-      }));
+    bbUpperSeriesRef.current?.setData(uniqueByTime(indicators.map(i => ({
+      time: toUTCTimestamp(i.timestamp),
+      value: i.bollingerUpper
+    }))));
 
-    const bbMiddleData: LineData[] = indicators
-      .filter((i) => i.bollingerMiddle > 0)
-      .map((i) => ({
-        time: toUTCTimestamp(i.timestamp),
-        value: i.bollingerMiddle,
-      }));
+    bbMiddleSeriesRef.current?.setData(uniqueByTime(indicators.map(i => ({
+      time: toUTCTimestamp(i.timestamp),
+      value: i.bollingerMiddle
+    }))));
 
-    const bbLowerData: LineData[] = indicators
-      .filter((i) => i.bollingerLower > 0)
-      .map((i) => ({
-        time: toUTCTimestamp(i.timestamp),
-        value: i.bollingerLower,
-      }));
-
-    bbUpperSeriesRef.current?.setData(bbUpperData);
-    bbMiddleSeriesRef.current?.setData(bbMiddleData);
-    bbLowerSeriesRef.current?.setData(bbLowerData);
+    bbLowerSeriesRef.current?.setData(uniqueByTime(indicators.map(i => ({
+      time: toUTCTimestamp(i.timestamp),
+      value: i.bollingerLower
+    }))));
   }, [indicators, showBollinger]);
 
+  // 📊 RSI
   useEffect(() => {
-    if (!showRSI || !indicators.length) {
-      rsiSeriesRef.current?.setData([]);
-      rsiOverboughtRef.current?.setData([]);
-      rsiOversoldRef.current?.setData([]);
-      return;
-    }
+    if (!showRSI || !indicators.length) return;
 
-    const rsiData: LineData[] = indicators
-      .filter((i) => Number.isFinite(i.rsi))
-      .map((i) => ({
-        time: toUTCTimestamp(i.timestamp),
-        value: Math.max(0, Math.min(100, i.rsi)),
-      }));
-
-    const rsiOverData: LineData[] = rsiData.map((point) => ({
-      time: point.time,
-      value: 70,
-    }));
-
-    const rsiUnderData: LineData[] = rsiData.map((point) => ({
-      time: point.time,
-      value: 30,
-    }));
+    const rsiData = uniqueByTime(indicators.map(i => ({
+      time: toUTCTimestamp(i.timestamp),
+      value: Math.max(0, Math.min(100, i.rsi))
+    })));
 
     rsiSeriesRef.current?.setData(rsiData);
-    rsiOverboughtRef.current?.setData(rsiOverData);
-    rsiOversoldRef.current?.setData(rsiUnderData);
+    rsiOverboughtRef.current?.setData(rsiData.map(p => ({ ...p, value: 70 })));
+    rsiOversoldRef.current?.setData(rsiData.map(p => ({ ...p, value: 30 })));
   }, [indicators, showRSI]);
 
+  // 📊 MACD
   useEffect(() => {
-    if (!showMACD || !indicators.length) {
-      macdLineSeriesRef.current?.setData([]);
-      macdSignalSeriesRef.current?.setData([]);
-      macdHistogramSeriesRef.current?.setData([]);
-      return;
-    }
+    if (!showMACD || !indicators.length) return;
 
-    const macdLineData: LineData[] = indicators
-      .filter((i) => Number.isFinite(i.macdLine))
-      .map((i) => ({
-        time: toUTCTimestamp(i.timestamp),
-        value: i.macdLine,
-      }));
+    macdLineSeriesRef.current?.setData(uniqueByTime(indicators.map(i => ({
+      time: toUTCTimestamp(i.timestamp),
+      value: i.macdLine
+    }))));
 
-    const macdSignalData: LineData[] = indicators
-      .filter((i) => Number.isFinite(i.macdSignal))
-      .map((i) => ({
-        time: toUTCTimestamp(i.timestamp),
-        value: i.macdSignal,
-      }));
+    macdSignalSeriesRef.current?.setData(uniqueByTime(indicators.map(i => ({
+      time: toUTCTimestamp(i.timestamp),
+      value: i.macdSignal
+    }))));
 
-    const macdHistData: HistogramData[] = indicators
-      .filter((i) => Number.isFinite(i.macdHistogram))
-      .map((i) => ({
-        time: toUTCTimestamp(i.timestamp),
-        value: i.macdHistogram,
-        color: i.macdHistogram >= 0 ? '#22c55e' : '#ef4444',
-      }));
-
-    macdLineSeriesRef.current?.setData(macdLineData);
-    macdSignalSeriesRef.current?.setData(macdSignalData);
-    macdHistogramSeriesRef.current?.setData(macdHistData);
+    macdHistogramSeriesRef.current?.setData(uniqueByTime(indicators.map(i => ({
+      time: toUTCTimestamp(i.timestamp),
+      value: i.macdHistogram,
+      color: i.macdHistogram >= 0 ? '#22c55e' : '#ef4444'
+    }))));
   }, [indicators, showMACD]);
 
-
+  // 📍 MARKERS
   useEffect(() => {
     if (!candleSeriesRef.current) return;
 
-    const buyMarkers = buySignals.map((signal) => ({
-      time: toUTCTimestamp(signal.time),
-      position: 'belowBar' as const,
-      color: '#22c55e',
-      shape: 'arrowUp' as const,
-      text: 'BUY',
-    }));
+    const allMarkers = uniqueByTime([
+      ...buySignals.map(s => ({
+        time: toUTCTimestamp(s.time),
+        position: 'belowBar' as const,
+        color: '#22c55e',
+        shape: 'arrowUp' as const,
+        text: 'BUY',
+      })),
+      ...sellSignals.map(s => ({
+        time: toUTCTimestamp(s.time),
+        position: 'aboveBar' as const,
+        color: '#ef4444',
+        shape: 'arrowDown' as const,
+        text: 'SELL',
+      })),
+    ]);
 
-    const sellMarkers = sellSignals.map((signal) => ({
-      time: toUTCTimestamp(signal.time),
-      position: 'aboveBar' as const,
-      color: '#ef4444',
-      shape: 'arrowDown' as const,
-      text: 'SELL',
-    }));
-
-    // ✅ MERGE BOTH
-    const allMarkers = [...buyMarkers, ...sellMarkers];
-
-    // ✅ SINGLE CALL
     createSeriesMarkers(candleSeriesRef.current, allMarkers);
-
   }, [buySignals, sellSignals]);
 
   return <div ref={chartContainerRef} className="w-full h-[78vh] min-h-[560px]" />;
