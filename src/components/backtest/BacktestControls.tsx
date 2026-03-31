@@ -15,6 +15,7 @@ const STRATEGIES = [
   { value: 'RSI_REVERSAL', label: 'RSI Reversal', description: 'Overbought/oversold reversal' },
   { value: 'EMA_CROSSOVER', label: 'EMA Crossover', description: 'Fast/slow EMA cross' },
   { value: 'EMA_PULLBACK', label: 'EMA Pullback', description: 'Crossover + retest entry' },
+  { value: 'SMC_FVG', label: 'SMC FVG + Order Block', description: 'Fair Value Gap with order blocks' },
 ] as const;
 
 const TIMEFRAMES = [
@@ -37,7 +38,7 @@ const TARGET_TYPES = [
 
 export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsProps) => {
   const [expanded, setExpanded] = useState(true);
-  const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK'>('ORB');
+  const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'SMC_FVG'>('ORB');
   const [from, setFrom] = useState(format(subDays(new Date(), 90), 'yyyy-MM-dd'));
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [timeframe, setTimeframe] = useState(5);
@@ -117,22 +118,20 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                   <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
                     Strategy
                   </label>
-                  <div className="space-y-1.5">
+                  <select
+                    value={strategy}
+                    onChange={(e) => setStrategy(e.target.value as typeof strategy)}
+                    className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                  >
                     {STRATEGIES.map((s) => (
-                      <button
-                        key={s.value}
-                        onClick={() => setStrategy(s.value)}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${
-                          strategy === s.value
-                            ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                            : 'bg-[#0a0a0f]/60 text-gray-400 border border-gray-800/50 hover:border-gray-700'
-                        }`}
-                      >
-                        <p className="font-medium">{s.label}</p>
-                        <p className="text-xs opacity-60">{s.description}</p>
-                      </button>
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
                     ))}
-                  </div>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {STRATEGIES.find(s => s.value === strategy)?.description}
+                  </p>
                 </div>
 
                 {/* Date Range */}
