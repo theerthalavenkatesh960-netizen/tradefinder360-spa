@@ -49,6 +49,14 @@ interface TooltipState {
   trade: BacktestTrade;
 }
 
+type StepState = 'done' | 'active' | 'pending';
+
+interface ReplayStep {
+  key: string;
+  label: string;
+  state: StepState;
+}
+
 interface BacktestChartProps {
   candles: Candle[];
   indicators?: Indicators[];
@@ -71,6 +79,16 @@ const toUTC = (d: string | number | Date): UTCTimestamp =>
   (new Date(d).getTime() / 1000) as UTCTimestamp;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const toIstDayKey = (value: string | number | Date): string => {
+  const ms = new Date(value).getTime();
+  const istMs = ms + 5.5 * 60 * 60 * 1000;
+  const d = new Date(istMs);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
 export const BacktestChart = ({
   candles,
@@ -122,6 +140,7 @@ export const BacktestChart = ({
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [legendOpen, setLegendOpen] = useState(false);
   const candleSourceSignatureRef = useRef('');
 
   const drawBoxes = useCallback(() => {
@@ -349,6 +368,33 @@ export const BacktestChart = ({
     const currentCandles = candlesRef.current;
     const currentReplayNow = replayNowRef.current;
 
+    const drawBadge = (x: number, y: number, text: string, bg: string, fg: string) => {
+      const padX = 6;
+      const h = 16;
+      ctx.font = '10px sans-serif';
+      const w = ctx.measureText(text).width + padX * 2;
+      const left = x - w / 2;
+      const top = y - h / 2;
+      const r = 4;
+
+      ctx.beginPath();
+      ctx.moveTo(left + r, top);
+      ctx.lineTo(left + w - r, top);
+      ctx.quadraticCurveTo(left + w, top, left + w, top + r);
+      ctx.lineTo(left + w, top + h - r);
+      ctx.quadraticCurveTo(left + w, top + h, left + w - r, top + h);
+      ctx.lineTo(left + r, top + h);
+      ctx.quadraticCurveTo(left, top + h, left, top + h - r);
+      ctx.lineTo(left, top + r);
+      ctx.quadraticCurveTo(left, top, left + r, top);
+      ctx.closePath();
+      ctx.fillStyle = bg;
+      ctx.fill();
+
+      ctx.fillStyle = fg;
+      ctx.fillText(text, left + padX, top + 11);
+    };
+
     if (currentStrategy === 'ORB_FVG_RETEST' && currentAnnotations) {
       const timeScale = chart.timeScale();
 
@@ -370,7 +416,35 @@ export const BacktestChart = ({
           }, -1)
         : Number.MAX_SAFE_INTEGER;
 
-      // ── 1. ORB zones — one per trading day ────────────────────────────────
+      // Very light vertical divider at each IST day start.
+      // Keep it subtle so it helps orientation without cluttering the replay.
+      if (currentCandles && currentCandles.length > 0) {
+        let prevDayKey: string | null = null;
+        const maxIdx = Math.min(replayCandleIdx, currentCandles.length - 1);
+
+        for (let i = 0; i <= maxIdx; i++) {
+          const c = currentCandles[i];
+          const dayKey = toIstDayKey(c.timestamp as any);
+          const isDayStart = dayKey !== prevDayKey;
+          prevDayKey = dayKey;
+
+          if (!isDayStart) continue;
+
+          const x = getCandleX(i);
+          if (x <= 0) continue;
+
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 6]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
+      // ── 1. ORB range lines — one pair per trading day ─────────────────────
       if (currentAnnotations.orbZones && currentAnnotations.orbZones.length > 0) {
         currentAnnotations.orbZones.forEach((orb) => {
           const { orbStartIdx, orbEndIdx, orbHigh, orbLow, tradeNotTakenReason } = orb;
@@ -378,40 +452,34 @@ export const BacktestChart = ({
           if (orbHigh <= 0 || orbLow <= 0) return;
 
           const x1 = getCandleX(orbStartIdx);
-          // Clamp end to replay cursor so zone doesn't peek into the future
+          // Clamp end to replay cursor so lines never peek into the future.
+          // orbEndIdx is day-bounded from backend, so lines never bleed into next day.
           const clampedEnd = Math.min(orbEndIdx, replayCandleIdx);
           const x2 = getCandleX(clampedEnd);
           const y1 = getPriceY(orbHigh);
           const y2 = getPriceY(orbLow);
-          const yTop = Math.min(y1, y2);
-          const boxH = Math.abs(y2 - y1);
 
-          // Fill — muted amber when no trade taken, indigo when trade was taken
-          ctx.fillStyle = tradeNotTakenReason
-            ? 'rgba(251, 191, 36, 0.05)'   // amber-muted
-            : 'rgba(99, 102, 241, 0.08)';   // indigo
-          ctx.fillRect(x1, yTop, x2 - x1, boxH);
-
-          // Dashed high / low lines
+          // Two horizontal range lines for the day.
           const borderColor = tradeNotTakenReason
             ? 'rgba(251, 191, 36, 0.45)'
             : 'rgba(99, 102, 241, 0.6)';
           ctx.strokeStyle = borderColor;
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.7;
           ctx.setLineDash([4, 4]);
           ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y1); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(x1, y2); ctx.lineTo(x2, y2); ctx.stroke();
           ctx.setLineDash([]);
 
-          // "ORB" label top-left
+          // Labels for top and bottom range values.
           ctx.fillStyle = borderColor.replace('0.45', '0.85').replace('0.6', '0.9');
           ctx.font = 'bold 10px sans-serif';
-          ctx.fillText('ORB', x1 + 4, yTop - 3);
+          ctx.fillText(`ORB H ${orbHigh.toFixed(2)}`, x1 + 4, y1 - 4);
+          ctx.fillText(`ORB L ${orbLow.toFixed(2)}`, x1 + 4, y2 + 12);
 
-          // "No Trade: reason" label on right edge when day is visible in replay
+          // End-of-day reason label when replay has reached this day close.
           if (tradeNotTakenReason && clampedEnd === orbEndIdx) {
             const labelX = x2 + 4;
-            const labelY = yTop + boxH / 2 + 4;
+            const labelY = (y1 + y2) / 2 + 4;
             ctx.fillStyle = 'rgba(251, 191, 36, 0.9)';
             ctx.font = '9px sans-serif';
             ctx.fillText(`✗ ${tradeNotTakenReason}`, labelX, labelY);
@@ -520,12 +588,21 @@ export const BacktestChart = ({
             }
             case 'RETEST': {
               const y = getPriceY(c?.low ?? 0);
-              ctx.fillStyle = 'rgba(251, 146, 60, 0.9)';
+              ctx.strokeStyle = 'rgba(251, 146, 60, 0.7)';
+              ctx.lineWidth = 1;
+              ctx.setLineDash([3, 3]);
               ctx.beginPath();
-              ctx.arc(x, y + 8, 4, 0, Math.PI * 2); ctx.fill();
-              ctx.fillStyle = 'rgba(251, 146, 60, 0.85)';
-              ctx.font = '9px sans-serif';
-              ctx.fillText('RT', x - 5, y + 20);
+              ctx.moveTo(x, y - 26);
+              ctx.lineTo(x, y + 10);
+              ctx.stroke();
+              ctx.setLineDash([]);
+
+              ctx.fillStyle = 'rgba(251, 146, 60, 0.92)';
+              ctx.beginPath();
+              ctx.arc(x, y + 10, 4.5, 0, Math.PI * 2);
+              ctx.fill();
+
+              drawBadge(x, y - 34, 'Retested', 'rgba(251, 146, 60, 0.9)', '#111827');
               break;
             }
             case 'ENGULF_CONFIRMED': {
@@ -1040,36 +1117,55 @@ export const BacktestChart = ({
   const winCount = trades.filter((trade) => trade.pnl >= 0).length;
   const lossCount = trades.length - winCount;
 
+  const replayDayKey = useMemo(() => {
+    if (!replayNowMs || !candles.length) return '';
+    for (let i = candles.length - 1; i >= 0; i--) {
+      if (new Date(candles[i].timestamp).getTime() <= replayNowMs) {
+        return toIstDayKey(candles[i].timestamp);
+      }
+    }
+    return '';
+  }, [replayNowMs, candles]);
+
   // Compute current replay date and status
   const replayStatus = useMemo(() => {
     if (!replayNowMs || !candles.length || strategy !== 'ORB_FVG_RETEST') {
-      return { date: '', status: '', eventCount: 0 };
+      return { date: '', status: '', detail: '', eventCount: 0 };
     }
 
-    // Find current candle
-    const currentCandle = candles.find((c) => new Date(c.timestamp).getTime() <= replayNowMs);
+    // Find the latest candle that is already revealed in replay.
+    let currentCandle: Candle | null = null;
+    for (let i = candles.length - 1; i >= 0; i--) {
+      if (new Date(candles[i].timestamp).getTime() <= replayNowMs) {
+        currentCandle = candles[i];
+        break;
+      }
+    }
+
     if (!currentCandle) {
-      return { date: '', status: '', eventCount: 0 };
+      return { date: '', status: '', detail: '', eventCount: 0 };
     }
 
     const date = format(new Date(currentCandle.timestamp), 'MMM dd, yyyy');
+    const dayKey = toIstDayKey(currentCandle.timestamp);
 
     // Determine status from annotations
     let status = 'Waiting for ORB to form';
     let eventCount = 0;
 
     if (!annotations?.events) {
-      return { date, status, eventCount };
+      return { date, status, detail: '', eventCount };
     }
 
-    // Find the latest event at or before the current replay time
-    const currentTimeMs = currentCandle.timestamp;
-    const relevantEvents = annotations.events.filter(
-      (e) => new Date(e.timestamp || currentTimeMs).getTime() <= replayNowMs
-    );
+    // Find all emitted events at or before current replay time, but only for current replay day.
+    const relevantEvents = annotations.events
+      .filter((e) => !!e.timestamp)
+      .filter((e) => toIstDayKey(e.timestamp) === dayKey)
+      .filter((e) => new Date(e.timestamp).getTime() <= replayNowMs)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     if (relevantEvents.length === 0) {
-      return { date, status, eventCount: 0 };
+      return { date, status, detail: 'Checking ORB breakout conditions', eventCount: 0 };
     }
 
     eventCount = relevantEvents.length;
@@ -1096,8 +1192,113 @@ export const BacktestChart = ({
 
     status = statusMap[latestEvent.eventType] || latestEvent.eventType || status;
 
-    return { date, status, eventCount };
+    return {
+      date,
+      status,
+      detail: latestEvent.description || '',
+      eventCount,
+    };
   }, [replayNowMs, candles, strategy, annotations]);
+
+  const replayNarration = useMemo(() => {
+    if (!replayNowMs || strategy !== 'ORB_FVG_RETEST' || !annotations?.events) {
+      return {
+        currentPhase: 'Waiting for ORB to form',
+        steps: [] as ReplayStep[],
+        recentEvents: [] as { time: string; text: string }[],
+      };
+    }
+
+    const eventTs = (ts: string) => new Date(ts).getTime();
+    const upToNow = annotations.events
+      .filter((e) => !!e.timestamp)
+      .filter((e) => !replayDayKey || toIstDayKey(e.timestamp) === replayDayKey)
+      .filter((e) => eventTs(e.timestamp) <= replayNowMs)
+      .sort((a, b) => eventTs(a.timestamp) - eventTs(b.timestamp));
+
+    if (upToNow.length === 0) {
+      return {
+        currentPhase: 'Checking ORB breakout conditions',
+        steps: [
+          { key: 'orb', label: 'ORB', state: 'active' },
+          { key: 'breakout', label: 'Breakout', state: 'pending' },
+          { key: 'fvg', label: 'FVG', state: 'pending' },
+          { key: 'retest', label: 'Retest', state: 'pending' },
+          { key: 'engulf', label: 'Engulf', state: 'pending' },
+          { key: 'entry', label: 'Entry', state: 'pending' },
+        ] as ReplayStep[],
+        recentEvents: [] as { time: string; text: string }[],
+      };
+    }
+
+    const lastEvent = upToNow[upToNow.length - 1];
+    const hasEvent = (types: string[]) => upToNow.some((e) => types.includes(e.eventType));
+
+    const isRejected = hasEvent([
+      'TRADE_NOT_TAKEN',
+      'RR_FAILED',
+      'DRAWDOWN_HALT',
+      'QTY_FAILED',
+      'QTY_FINAL_FAIL',
+      'CONFLUENCE_FAIL',
+      'VOLUME_FAIL',
+    ]);
+
+    const hasEntry = hasEvent(['ENTRY']);
+    const hasEngulf = hasEvent(['ENGULF_CONFIRMED']);
+    const hasRetest = hasEvent(['RETEST', 'RETEST_CONTINUED']);
+    const hasFvg = hasEvent(['FVG_FORMED']);
+    const hasBreakout = hasEvent(['BREAKOUT']);
+
+    let currentPhase = replayStatus.status || 'Running strategy checks';
+    if (!hasBreakout) currentPhase = 'Waiting for breakout confirmation';
+    else if (!hasFvg) currentPhase = 'Breakout confirmed - checking for FVG';
+    else if (!hasRetest) currentPhase = 'FVG found - waiting for retest';
+    else if (!hasEngulf) currentPhase = 'Retest happened - checking engulfing';
+    else if (!hasEntry && !isRejected) currentPhase = 'Engulfing confirmed - preparing entry';
+
+    const steps: ReplayStep[] = [
+      { key: 'orb', label: 'ORB', state: 'done' },
+      {
+        key: 'breakout',
+        label: 'Breakout',
+        state: !hasBreakout ? 'active' : 'done',
+      },
+      {
+        key: 'fvg',
+        label: 'FVG',
+        state: hasFvg ? 'done' : hasBreakout ? 'active' : 'pending',
+      },
+      {
+        key: 'retest',
+        label: 'Retest',
+        state: hasRetest ? 'done' : hasFvg ? 'active' : 'pending',
+      },
+      {
+        key: 'engulf',
+        label: 'Engulf',
+        state: hasEngulf ? 'done' : hasRetest ? 'active' : 'pending',
+      },
+      {
+        key: 'entry',
+        label: 'Entry',
+        state: hasEntry ? 'done' : hasEngulf && !isRejected ? 'active' : 'pending',
+      },
+    ];
+
+    const recentEvents = upToNow
+      .slice(-4)
+      .map((e) => ({
+        time: format(new Date(e.timestamp), 'HH:mm'),
+        text: e.description || e.eventType,
+      }));
+
+    if (lastEvent.eventType === 'TRADE_NOT_TAKEN') {
+      currentPhase = 'Day closed - trade not taken';
+    }
+
+    return { currentPhase, steps, recentEvents };
+  }, [replayNowMs, strategy, annotations, replayStatus.status, replayDayKey]);
 
   const tooltipLeft = tooltip
     ? clamp(tooltip.x + 14, 8, Math.max(8, (containerRef.current?.clientWidth ?? 0) - 236))
@@ -1105,16 +1306,19 @@ export const BacktestChart = ({
   const tooltipTop = tooltip
     ? clamp(tooltip.y - 10, 8, Math.max(8, (containerRef.current?.clientHeight ?? 0) - 220))
     : 0;
+  const hasReplayHeader = Boolean(replayStatus.date);
+  const replayHeaderHeight = hasReplayHeader ? 56 : 0;
+  const isOrbReplay = strategy === 'ORB_FVG_RETEST';
 
   return (
     <div className="relative bg-[#0a0a0f] rounded-xl overflow-hidden border border-gray-800/50">
-      {replayStatus.date && (
-        <div className="absolute top-0 left-0 right-0 bg-gradient-to-br from-slate-900/60 to-slate-900/40 px-4 py-2.5 border-b border-indigo-500/30 z-30">
+      {hasReplayHeader && (
+        <div className="absolute top-0 left-0 right-0 bg-gradient-to-br from-slate-900/70 to-slate-900/45 px-4 py-2.5 border-b border-indigo-500/30 z-30">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="text-sm font-semibold text-indigo-400">{replayStatus.date}</div>
               <div className="h-4 w-px bg-slate-600/40" />
-              <div className="text-sm text-slate-300 max-w-2xl truncate">{replayStatus.status}</div>
+              <div className="text-sm text-slate-300 max-w-3xl truncate">{replayNarration.currentPhase || replayStatus.status}</div>
             </div>
             {replayStatus.eventCount > 0 && (
               <div className="text-xs text-slate-400 flex items-center space-x-1">
@@ -1123,14 +1327,49 @@ export const BacktestChart = ({
               </div>
             )}
           </div>
+          {replayStatus.detail && (
+            <div className="mt-1 text-xs text-slate-400 truncate">
+              {replayStatus.detail}
+            </div>
+          )}
+          {replayNarration.steps.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {replayNarration.steps.map((step) => {
+                const cls =
+                  step.state === 'done'
+                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                    : step.state === 'active'
+                    ? 'bg-indigo-500/20 border-indigo-500/45 text-indigo-200'
+                    : 'bg-slate-700/25 border-slate-600/40 text-slate-400';
+                return (
+                  <span
+                    key={step.key}
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${cls}`}
+                  >
+                    {step.label}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          {replayNarration.recentEvents.length > 0 && (
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1">
+              {replayNarration.recentEvents.map((evt, idx) => (
+                <div key={`${evt.time}-${idx}`} className="text-[11px] text-slate-300/90 truncate">
+                  <span className="text-indigo-300 mr-1">{evt.time}</span>
+                  <span>{evt.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
-      <div ref={containerRef} className="relative w-full" style={{ cursor: 'crosshair', paddingTop: replayStatus.date ? '2.5rem' : '0' }}>
+      <div ref={containerRef} className="relative w-full" style={{ cursor: 'crosshair', paddingTop: `${replayHeaderHeight}px` }}>
         <canvas
           ref={overlayRef}
           style={{
             position: 'absolute',
-            top: replayStatus.date ? '2.5rem' : '0',
+            top: `${replayHeaderHeight}px`,
             left: 0,
             pointerEvents: 'none',
             zIndex: 10,
@@ -1179,6 +1418,34 @@ export const BacktestChart = ({
       {trades.length > 0 && (
         <div className="absolute top-3 right-3 z-20 pointer-events-none rounded-full border border-gray-700/70 bg-[#12121a]/90 px-3 py-1 text-xs text-gray-200">
           {trades.length} trades | {winCount} wins | {lossCount} losses
+        </div>
+      )}
+
+      {isOrbReplay && (
+        <div className="border-t border-gray-800/70 bg-[#0b0b12] px-4 py-2">
+          <button
+            type="button"
+            onClick={() => setLegendOpen((prev) => !prev)}
+            className="w-full text-left text-xs text-gray-300 hover:text-white transition-colors"
+          >
+            {legendOpen ? 'Hide Replay Legend' : 'Show Replay Legend'}
+          </button>
+          {legendOpen && (
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-400">
+              <div>ORB box (indigo): opening range for the full day.</div>
+              <div>ORB box (amber): no trade taken for that day.</div>
+              <div>FVG box (teal): bullish fair value gap zone.</div>
+              <div>FVG box (rose): bearish fair value gap zone.</div>
+              <div>OB box (green): order block zone.</div>
+              <div>BO marker: breakout confirmed.</div>
+              <div>FVG marker: new gap detected.</div>
+              <div>Retested badge: close moved back into FVG.</div>
+              <div>ENG marker: engulfing confirmed.</div>
+              <div>IN marker: entry candle.</div>
+              <div>Red X marker: trade not taken at day end.</div>
+              <div>Status bar (top): current step the logic is evaluating.</div>
+            </div>
+          )}
         </div>
       )}
     </div>
