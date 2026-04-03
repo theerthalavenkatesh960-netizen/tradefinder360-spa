@@ -461,18 +461,18 @@ export const BacktestChart = ({
 
           // Two horizontal range lines for the day.
           const borderColor = tradeNotTakenReason
-            ? 'rgba(251, 191, 36, 0.45)'
-            : 'rgba(99, 102, 241, 0.6)';
+            ? 'rgba(251, 191, 36, 0.95)'
+            : 'rgba(99, 102, 241, 0.95)';
           ctx.strokeStyle = borderColor;
-          ctx.lineWidth = 1.7;
-          ctx.setLineDash([4, 4]);
+          ctx.lineWidth = 2.2;
+          ctx.setLineDash([6, 4]);
           ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y1); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(x1, y2); ctx.lineTo(x2, y2); ctx.stroke();
           ctx.setLineDash([]);
 
           // Labels for top and bottom range values.
-          ctx.fillStyle = borderColor.replace('0.45', '0.85').replace('0.6', '0.9');
-          ctx.font = 'bold 10px sans-serif';
+          ctx.fillStyle = borderColor;
+          ctx.font = 'bold 11px sans-serif';
           ctx.fillText(`ORB H ${orbHigh.toFixed(2)}`, x1 + 4, y1 - 4);
           ctx.fillText(`ORB L ${orbLow.toFixed(2)}`, x1 + 4, y2 + 12);
 
@@ -489,7 +489,7 @@ export const BacktestChart = ({
 
       // ── 2. FVG zones ───────────────────────────────────────────────────────
       if (currentAnnotations.fvgZones && currentAnnotations.fvgZones.length > 0) {
-        currentAnnotations.fvgZones.forEach((fvg, idx) => {
+        currentAnnotations.fvgZones.forEach((fvg) => {
           const { fvgStartIdx, fvgEndIdx, fvgHigh, fvgLow, direction } = fvg;
           if (fvgStartIdx > replayCandleIdx) return;
           if (fvgHigh <= 0 || fvgLow <= 0) return;
@@ -503,22 +503,22 @@ export const BacktestChart = ({
 
           const isBullish = direction === 'BULLISH';
           ctx.fillStyle = isBullish
-            ? 'rgba(51, 214, 166, 0.06)'   // teal for bullish
-            : 'rgba(251, 113, 133, 0.06)';  // rose for bearish
+            ? 'rgba(45, 212, 191, 0.2)'   // teal for bullish
+            : 'rgba(251, 113, 133, 0.2)';  // rose for bearish
           ctx.fillRect(x1, yTop, x2 - x1, boxH);
 
           const borderCol = isBullish
-            ? 'rgba(51, 214, 166, 0.5)'
-            : 'rgba(251, 113, 133, 0.5)';
+            ? 'rgba(20, 184, 166, 0.95)'
+            : 'rgba(244, 63, 94, 0.95)';
           ctx.strokeStyle = borderCol;
-          ctx.lineWidth = 1;
-          ctx.setLineDash([2, 3]);
+          ctx.lineWidth = 1.8;
+          ctx.setLineDash([4, 3]);
           ctx.strokeRect(x1, yTop, x2 - x1, boxH);
           ctx.setLineDash([]);
 
-          ctx.fillStyle = borderCol.replace('0.5', '0.85');
-          ctx.font = '9px sans-serif';
-          ctx.fillText(`FVG${idx + 1} ${isBullish ? '▲' : '▼'}`, x1 + 3, yTop + 11);
+          ctx.fillStyle = borderCol;
+          ctx.font = 'bold 10px sans-serif';
+          ctx.fillText(`FVG ${isBullish ? 'BULL' : 'BEAR'}`, x1 + 4, yTop + 12);
         });
       }
 
@@ -536,15 +536,15 @@ export const BacktestChart = ({
           const yTop = Math.min(y1, y2);
           const boxH = Math.abs(y2 - y1);
 
-          ctx.fillStyle = 'rgba(34, 197, 94, 0.05)';
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.14)';
           ctx.fillRect(x1, yTop, x2 - x1, boxH);
-          ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([1, 2]);
+          ctx.strokeStyle = 'rgba(22, 163, 74, 0.9)';
+          ctx.lineWidth = 1.6;
+          ctx.setLineDash([5, 3]);
           ctx.strokeRect(x1, yTop, x2 - x1, boxH);
           ctx.setLineDash([]);
-          ctx.fillStyle = 'rgba(34, 197, 94, 0.75)';
-          ctx.font = '9px sans-serif';
+          ctx.fillStyle = 'rgba(21, 128, 61, 0.95)';
+          ctx.font = 'bold 10px sans-serif';
           ctx.fillText(`OB${idx + 1}`, x1 + 3, yTop + 11);
         });
       }
@@ -657,33 +657,15 @@ export const BacktestChart = ({
               break;
             }
             case 'ENGULF_FAIL': {
-              const y = getPriceY(c?.close ?? 0);
-              ctx.fillStyle = 'rgba(239, 68, 68, 0.7)';
-              ctx.beginPath();
-              ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
-              ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
-              ctx.lineWidth = 1;
-              ctx.stroke();
+              // Keep failure details in narrator panel to avoid marker clutter.
               break;
             }
             case 'RETEST_CONTINUED': {
-              const y = getPriceY(c?.close ?? 0);
-              ctx.fillStyle = 'rgba(251, 146, 60, 0.7)';
-              ctx.beginPath();
-              ctx.arc(x, y + 8, 3, 0, Math.PI * 2); ctx.fill();
-              ctx.fillStyle = 'rgba(251, 146, 60, 0.85)';
-              ctx.font = '8px sans-serif';
-              ctx.fillText('RC', x - 5, y + 18);
+              // Keep continuation details in narrator panel to avoid marker clutter.
               break;
             }
             case 'PHASE_BACK_TO_RETEST': {
-              const y = getPriceY(c?.close ?? 0);
-              ctx.fillStyle = 'rgba(59, 130, 246, 0.7)';
-              ctx.beginPath();
-              ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
-              ctx.fillStyle = 'rgba(59, 130, 246, 0.85)';
-              ctx.font = '8px sans-serif';
-              ctx.fillText('BK', x - 5, y - 12);
+              // Keep reset details in narrator panel to avoid marker clutter.
               break;
             }
             case 'RR_FAILED': {
@@ -1432,8 +1414,8 @@ export const BacktestChart = ({
           </button>
           {legendOpen && (
             <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-400">
-              <div>ORB box (indigo): opening range for the full day.</div>
-              <div>ORB box (amber): no trade taken for that day.</div>
+              <div>ORB H/L lines (indigo): opening range for that day only.</div>
+              <div>ORB H/L lines (amber): no trade taken for that day.</div>
               <div>FVG box (teal): bullish fair value gap zone.</div>
               <div>FVG box (rose): bearish fair value gap zone.</div>
               <div>OB box (green): order block zone.</div>
@@ -1443,7 +1425,7 @@ export const BacktestChart = ({
               <div>ENG marker: engulfing confirmed.</div>
               <div>IN marker: entry candle.</div>
               <div>Red X marker: trade not taken at day end.</div>
-              <div>Status bar (top): current step the logic is evaluating.</div>
+              <div>Status bar (top): current step and rejection reason.</div>
             </div>
           )}
         </div>
