@@ -66,14 +66,6 @@ interface BacktestChartProps {
   annotations?: BacktestAnnotations;
 }
 
-interface OverlayZone {
-  startCandle: Candle | null;
-  endCandle: Candle | null;
-  high: number;
-  low: number;
-  type: 'ORB' | 'FVG' | 'OB';
-  label: string;
-}
 
 const toUTC = (d: string | number | Date): UTCTimestamp =>
   (new Date(d).getTime() / 1000) as UTCTimestamp;
@@ -117,11 +109,17 @@ export const BacktestChart = ({
   const selectedIdRef = useRef(selectedTradeId);
   const hoveredIdRef = useRef(hoveredTradeId);
   const replayNowRef = useRef<number | null>(replayNowMs);
+  const candlesRef = useRef(candles);
+  const strategyRef = useRef(strategy);
+  const annotationsRef = useRef(annotations);
 
   useEffect(() => { tradesRef.current = trades; }, [trades]);
   useEffect(() => { selectedIdRef.current = selectedTradeId; }, [selectedTradeId]);
   useEffect(() => { hoveredIdRef.current = hoveredTradeId; }, [hoveredTradeId]);
   useEffect(() => { replayNowRef.current = replayNowMs; }, [replayNowMs]);
+  useEffect(() => { candlesRef.current = candles; }, [candles]);
+  useEffect(() => { strategyRef.current = strategy; }, [strategy]);
+  useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const candleSourceSignatureRef = useRef('');
@@ -346,140 +344,223 @@ export const BacktestChart = ({
     tradeHitTargetsRef.current = hitTargets;
 
     // ─── Render ORB/FVG/OB annotations for ORB_FVG_RETEST strategy ───────────
-    if (strategy === 'ORB_FVG_RETEST' && annotations) {
-      const priceScale = series.priceScale();
+    const currentStrategy = strategyRef.current;
+    const currentAnnotations = annotationsRef.current;
+    const currentCandles = candlesRef.current;
+    const currentReplayNow = replayNowRef.current;
+
+    if (currentStrategy === 'ORB_FVG_RETEST' && currentAnnotations) {
       const timeScale = chart.timeScale();
 
-      // Helper: get price Y coordinate
-      const getPriceY = (price: number) => {
-        const coord = priceScale.priceToCoordinate(price);
-        return coord ?? height / 2;
+      // series.priceToCoordinate is the correct lightweight-charts v4 API
+      const getPriceY = (price: number) => series.priceToCoordinate(price) ?? height / 2;
+      // Map candle index to UTC timestamp then to screen X
+      const getCandleX = (idx: number): number => {
+        const c = currentCandles?.[idx];
+        if (!c) return 0;
+        const utc = (typeof c.timestamp === 'number' ? c.timestamp : new Date(c.timestamp).getTime() / 1000) as UTCTimestamp;
+        return timeScale.timeToCoordinate(utc) ?? 0;
       };
 
-      // Helper: get candle X coordinate
-      const getCandleX = (candleIndex: number) => {
-        const logicalIndex = candleIndex;
-        const screenCoord = timeScale.logicalToCoordinate(logicalIndex);
-        return screenCoord ?? 0;
-      };
+      // Determine the last candle index visible in replay so we can hide future annotations
+      const replayCandleIdx = currentReplayNow
+        ? (currentCandles ?? []).reduce((last, c, i) => {
+            const ts = typeof c.timestamp === 'number' ? c.timestamp * 1000 : new Date(c.timestamp).getTime();
+            return ts <= currentReplayNow ? i : last;
+          }, -1)
+        : Number.MAX_SAFE_INTEGER;
 
-      // Render ORB zone (high/low rectangle)
-      if (annotations.orbZone) {
-        const { orbStartIdx, orbEndIdx, orbHigh, orbLow } = annotations.orbZone;
-        if (orbHigh > 0 && orbLow > 0) {
+      // ── 1. ORB zones — one per trading day ────────────────────────────────
+      if (currentAnnotations.orbZones && currentAnnotations.orbZones.length > 0) {
+        currentAnnotations.orbZones.forEach((orb) => {
+          const { orbStartIdx, orbEndIdx, orbHigh, orbLow, tradeNotTakenReason } = orb;
+          if (orbStartIdx > replayCandleIdx) return;   // not yet reached in replay
+          if (orbHigh <= 0 || orbLow <= 0) return;
+
           const x1 = getCandleX(orbStartIdx);
-          const x2 = getCandleX(orbEndIdx);
+          // Clamp end to replay cursor so zone doesn't peek into the future
+          const clampedEnd = Math.min(orbEndIdx, replayCandleIdx);
+          const x2 = getCandleX(clampedEnd);
           const y1 = getPriceY(orbHigh);
           const y2 = getPriceY(orbLow);
+          const yTop = Math.min(y1, y2);
+          const boxH = Math.abs(y2 - y1);
 
-          ctx.fillStyle = 'rgba(99, 102, 241, 0.08)'; // indigo, very transparent
-          ctx.fillRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
+          // Fill — muted amber when no trade taken, indigo when trade was taken
+          ctx.fillStyle = tradeNotTakenReason
+            ? 'rgba(251, 191, 36, 0.05)'   // amber-muted
+            : 'rgba(99, 102, 241, 0.08)';   // indigo
+          ctx.fillRect(x1, yTop, x2 - x1, boxH);
 
-          // ORB high/low lines
-          ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)';
-          ctx.lineWidth = 2;
+          // Dashed high / low lines
+          const borderColor = tradeNotTakenReason
+            ? 'rgba(251, 191, 36, 0.45)'
+            : 'rgba(99, 102, 241, 0.6)';
+          ctx.strokeStyle = borderColor;
+          ctx.lineWidth = 1.5;
           ctx.setLineDash([4, 4]);
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y1);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(x1, y2);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y1); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(x1, y2); ctx.lineTo(x2, y2); ctx.stroke();
           ctx.setLineDash([]);
 
-          // ORB label
-          ctx.fillStyle = 'rgba(99, 102, 241, 0.9)';
-          ctx.font = '11px sans-serif';
-          ctx.fillText('ORB', x1 + 4, Math.min(y1, y2) - 4);
-        }
-      }
+          // "ORB" label top-left
+          ctx.fillStyle = borderColor.replace('0.45', '0.85').replace('0.6', '0.9');
+          ctx.font = 'bold 10px sans-serif';
+          ctx.fillText('ORB', x1 + 4, yTop - 3);
 
-      // Render FVG zones (fair value gaps)
-      if (annotations.fvgZones && annotations.fvgZones.length > 0) {
-        annotations.fvgZones.forEach((fvg, idx) => {
-          const { fvgStartIdx, fvgEndIdx, fvgHigh, fvgLow } = fvg;
-          if (fvgHigh > 0 && fvgLow > 0) {
-            const x1 = getCandleX(fvgStartIdx);
-            const x2 = getCandleX(fvgEndIdx);
-            const y1 = getPriceY(fvgHigh);
-            const y2 = getPriceY(fvgLow);
-
-            ctx.fillStyle = 'rgba(168, 85, 247, 0.06)'; // purple, very transparent
-            ctx.fillRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
-
-            // FVG borders
-            ctx.strokeStyle = 'rgba(168, 85, 247, 0.5)';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([2, 2]);
-            ctx.strokeRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
-            ctx.setLineDash([]);
-
-            // FVG label
-            ctx.fillStyle = 'rgba(168, 85, 247, 0.8)';
-            ctx.font = '10px sans-serif';
-            ctx.fillText(`FVG${idx + 1}`, x1 + 2, Math.min(y1, y2) + 12);
+          // "No Trade: reason" label on right edge when day is visible in replay
+          if (tradeNotTakenReason && clampedEnd === orbEndIdx) {
+            const labelX = x2 + 4;
+            const labelY = yTop + boxH / 2 + 4;
+            ctx.fillStyle = 'rgba(251, 191, 36, 0.9)';
+            ctx.font = '9px sans-serif';
+            ctx.fillText(`✗ ${tradeNotTakenReason}`, labelX, labelY);
           }
         });
       }
 
-      // Render Order Block zones (if enabled)
-      if (annotations.obZones && annotations.obZones.length > 0) {
-        annotations.obZones.forEach((ob, idx) => {
+      // ── 2. FVG zones ───────────────────────────────────────────────────────
+      if (currentAnnotations.fvgZones && currentAnnotations.fvgZones.length > 0) {
+        currentAnnotations.fvgZones.forEach((fvg, idx) => {
+          const { fvgStartIdx, fvgEndIdx, fvgHigh, fvgLow, direction } = fvg;
+          if (fvgStartIdx > replayCandleIdx) return;
+          if (fvgHigh <= 0 || fvgLow <= 0) return;
+
+          const x1 = getCandleX(fvgStartIdx);
+          const x2 = getCandleX(Math.min(fvgEndIdx, replayCandleIdx));
+          const y1 = getPriceY(fvgHigh);
+          const y2 = getPriceY(fvgLow);
+          const yTop = Math.min(y1, y2);
+          const boxH = Math.abs(y2 - y1);
+
+          const isBullish = direction === 'BULLISH';
+          ctx.fillStyle = isBullish
+            ? 'rgba(51, 214, 166, 0.06)'   // teal for bullish
+            : 'rgba(251, 113, 133, 0.06)';  // rose for bearish
+          ctx.fillRect(x1, yTop, x2 - x1, boxH);
+
+          const borderCol = isBullish
+            ? 'rgba(51, 214, 166, 0.5)'
+            : 'rgba(251, 113, 133, 0.5)';
+          ctx.strokeStyle = borderCol;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 3]);
+          ctx.strokeRect(x1, yTop, x2 - x1, boxH);
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = borderCol.replace('0.5', '0.85');
+          ctx.font = '9px sans-serif';
+          ctx.fillText(`FVG${idx + 1} ${isBullish ? '▲' : '▼'}`, x1 + 3, yTop + 11);
+        });
+      }
+
+      // ── 3. Order Block zones ───────────────────────────────────────────────
+      if (currentAnnotations.obZones && currentAnnotations.obZones.length > 0) {
+        currentAnnotations.obZones.forEach((ob, idx) => {
           const { obStartIdx, obEndIdx, obHigh, obLow } = ob;
-          if (obHigh > 0 && obLow > 0) {
-            const x1 = getCandleX(obStartIdx);
-            const x2 = getCandleX(obEndIdx);
-            const y1 = getPriceY(obHigh);
-            const y2 = getPriceY(obLow);
+          if (obStartIdx > replayCandleIdx) return;
+          if (obHigh <= 0 || obLow <= 0) return;
 
-            ctx.fillStyle = 'rgba(34, 197, 94, 0.05)'; // green, very transparent
-            ctx.fillRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
+          const x1 = getCandleX(obStartIdx);
+          const x2 = getCandleX(Math.min(obEndIdx, replayCandleIdx));
+          const y1 = getPriceY(obHigh);
+          const y2 = getPriceY(obLow);
+          const yTop = Math.min(y1, y2);
+          const boxH = Math.abs(y2 - y1);
 
-            // OB borders
-            ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([1, 1]);
-            ctx.strokeRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
-            ctx.setLineDash([]);
-
-            // OB label
-            ctx.fillStyle = 'rgba(34, 197, 94, 0.7)';
-            ctx.font = '10px sans-serif';
-            ctx.fillText(`OB${idx + 1}`, x1 + 2, Math.min(y1, y2) + 24);
-          }
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.05)';
+          ctx.fillRect(x1, yTop, x2 - x1, boxH);
+          ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([1, 2]);
+          ctx.strokeRect(x1, yTop, x2 - x1, boxH);
+          ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.75)';
+          ctx.font = '9px sans-serif';
+          ctx.fillText(`OB${idx + 1}`, x1 + 3, yTop + 11);
         });
       }
 
-      // Render retracement event markers
-      if (annotations.retraceEvent) {
-        const { candleIdx, price } = annotations.retraceEvent;
-        const x = getCandleX(candleIdx);
-        const y = getPriceY(price);
+      // ── 4. Signal event markers from events[] ─────────────────────────────
+      if (currentAnnotations.events && currentAnnotations.events.length > 0) {
+        currentAnnotations.events.forEach((ev) => {
+          const evTs = new Date(ev.timestamp).getTime();
+          if (evTs > (currentReplayNow ?? Number.MAX_SAFE_INTEGER)) return;
 
-        ctx.fillStyle = 'rgba(251, 146, 60, 0.8)'; // orange
-        ctx.beginPath();
-        ctx.arc(x, y, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(10, 10, 15, 0.9)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
+          const evIdx = (currentCandles ?? []).findIndex((c) => {
+            const ts = typeof c.timestamp === 'number' ? c.timestamp * 1000 : new Date(c.timestamp).getTime();
+            return Math.abs(ts - evTs) < 60_000;
+          });
+          if (evIdx < 0 || evIdx > replayCandleIdx) return;
 
-      // Render engulfing event marker
-      if (annotations.engulfingEvent) {
-        const { candleIdx, price } = annotations.engulfingEvent;
-        const x = getCandleX(candleIdx);
-        const y = getPriceY(price);
+          const x = getCandleX(evIdx);
+          const c = currentCandles?.[evIdx] as any;
 
-        ctx.fillStyle = 'rgba(52, 211, 153, 0.8)'; // teal
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(10, 10, 15, 0.9)';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
+          switch (ev.eventType) {
+            case 'BREAKOUT': {
+              const y = getPriceY(c?.high ?? 0);
+              ctx.fillStyle = 'rgba(99, 102, 241, 0.9)';
+              ctx.beginPath();
+              ctx.moveTo(x, y - 14); ctx.lineTo(x - 5, y - 6); ctx.lineTo(x + 5, y - 6);
+              ctx.closePath(); ctx.fill();
+              ctx.fillStyle = 'rgba(99, 102, 241, 0.85)';
+              ctx.font = '9px sans-serif';
+              ctx.fillText('BO', x - 6, y - 16);
+              break;
+            }
+            case 'FVG_FORMED': {
+              const y = getPriceY(c?.high ?? 0);
+              ctx.fillStyle = 'rgba(168, 85, 247, 0.9)';
+              ctx.beginPath();
+              ctx.arc(x, y - 8, 4, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = 'rgba(168, 85, 247, 0.85)';
+              ctx.font = '9px sans-serif';
+              ctx.fillText('FVG', x - 8, y - 14);
+              break;
+            }
+            case 'RETEST': {
+              const y = getPriceY(c?.low ?? 0);
+              ctx.fillStyle = 'rgba(251, 146, 60, 0.9)';
+              ctx.beginPath();
+              ctx.arc(x, y + 8, 4, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = 'rgba(251, 146, 60, 0.85)';
+              ctx.font = '9px sans-serif';
+              ctx.fillText('RT', x - 5, y + 20);
+              break;
+            }
+            case 'ENGULF_CONFIRMED': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.fillStyle = 'rgba(52, 211, 153, 0.9)';
+              ctx.beginPath();
+              ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+              ctx.strokeStyle = 'rgba(10, 10, 15, 0.9)';
+              ctx.lineWidth = 1.2; ctx.stroke();
+              ctx.fillStyle = 'rgba(52, 211, 153, 0.85)';
+              ctx.font = '9px sans-serif';
+              ctx.fillText('ENG', x - 8, y - 10);
+              break;
+            }
+            case 'ENTRY': {
+              const y = getPriceY(c?.open ?? 0);
+              ctx.fillStyle = 'rgba(250, 204, 21, 0.95)';
+              ctx.beginPath();
+              ctx.moveTo(x, y - 10); ctx.lineTo(x - 6, y); ctx.lineTo(x + 6, y);
+              ctx.closePath(); ctx.fill();
+              ctx.fillStyle = 'rgba(250, 204, 21, 0.9)';
+              ctx.font = 'bold 9px sans-serif';
+              ctx.fillText('IN', x - 5, y - 12);
+              break;
+            }
+            case 'TRADE_NOT_TAKEN': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+              ctx.lineWidth = 2;
+              ctx.beginPath(); ctx.moveTo(x - 5, y - 5); ctx.lineTo(x + 5, y + 5); ctx.stroke();
+              ctx.beginPath(); ctx.moveTo(x + 5, y - 5); ctx.lineTo(x - 5, y + 5); ctx.stroke();
+              break;
+            }
+          }
+        });
       }
     }
 

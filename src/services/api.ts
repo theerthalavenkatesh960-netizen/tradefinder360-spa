@@ -182,12 +182,12 @@ export interface BacktestResult {
 }
 
 export interface BacktestAnnotations {
-  orbZone?: OrbZone;
+  // One OrbZone per trading day
+  orbZones?: OrbZone[];
   fvgZones?: FvgZone[];
   obZones?: OrderBlockZone[];
   retraceEvent?: ReplayEvent;
   engulfingEvent?: ReplayEvent;
-  // Legacy support
   orbs?: OrbAnnotation[];
   fvgs?: FvgAnnotation[];
   orderBlocks?: OrderBlockAnnotation[];
@@ -199,6 +199,8 @@ export interface OrbZone {
   orbEndIdx: number;
   orbHigh: number;
   orbLow: number;
+  /** Non-null when no trade was entered that day — reason why */
+  tradeNotTakenReason?: string | null;
 }
 
 export interface FvgZone {
@@ -206,6 +208,7 @@ export interface FvgZone {
   fvgEndIdx: number;
   fvgHigh: number;
   fvgLow: number;
+  direction?: string | null;  // 'BULLISH' | 'BEARISH'
 }
 
 export interface OrderBlockZone {
