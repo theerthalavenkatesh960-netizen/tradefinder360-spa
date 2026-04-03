@@ -12,7 +12,7 @@ import {
 } from 'lightweight-charts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { differenceInMinutes } from 'date-fns';
-import type { Candle, Indicators, BacktestTrade } from '../../services/api';
+import type { Candle, Indicators, BacktestTrade, BacktestAnnotations } from '../../services/api';
 import { formatPrice, formatUTCToIST } from '../../utils/formatters';
 
 interface TradeBox {
@@ -62,6 +62,17 @@ interface BacktestChartProps {
   replayFollowEnabled?: boolean;
   isReplayPlaying?: boolean;
   onReplayPauseFromZoom?: () => void;
+  strategy?: string;
+  annotations?: BacktestAnnotations;
+}
+
+interface OverlayZone {
+  startCandle: Candle | null;
+  endCandle: Candle | null;
+  high: number;
+  low: number;
+  type: 'ORB' | 'FVG' | 'OB';
+  label: string;
 }
 
 const toUTC = (d: string | number | Date): UTCTimestamp =>
@@ -82,6 +93,8 @@ export const BacktestChart = ({
   replayFollowEnabled = false,
   isReplayPlaying = false,
   onReplayPauseFromZoom,
+  strategy,
+  annotations,
 }: BacktestChartProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -331,13 +344,152 @@ export const BacktestChart = ({
 
     tradeBoxesRef.current = boxes;
     tradeHitTargetsRef.current = hitTargets;
+
+    // ─── Render ORB/FVG/OB annotations for ORB_FVG_RETEST strategy ───────────
+    if (strategy === 'ORB_FVG_RETEST' && annotations) {
+      const priceScale = series.priceScale();
+      const timeScale = chart.timeScale();
+
+      // Helper: get price Y coordinate
+      const getPriceY = (price: number) => {
+        const coord = priceScale.priceToCoordinate(price);
+        return coord ?? height / 2;
+      };
+
+      // Helper: get candle X coordinate
+      const getCandleX = (candleIndex: number) => {
+        const logicalIndex = candleIndex;
+        const screenCoord = timeScale.logicalToCoordinate(logicalIndex);
+        return screenCoord ?? 0;
+      };
+
+      // Render ORB zone (high/low rectangle)
+      if (annotations.orbZone) {
+        const { orbStartIdx, orbEndIdx, orbHigh, orbLow } = annotations.orbZone;
+        if (orbHigh > 0 && orbLow > 0) {
+          const x1 = getCandleX(orbStartIdx);
+          const x2 = getCandleX(orbEndIdx);
+          const y1 = getPriceY(orbHigh);
+          const y2 = getPriceY(orbLow);
+
+          ctx.fillStyle = 'rgba(99, 102, 241, 0.08)'; // indigo, very transparent
+          ctx.fillRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
+
+          // ORB high/low lines
+          ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y1);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(x1, y2);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // ORB label
+          ctx.fillStyle = 'rgba(99, 102, 241, 0.9)';
+          ctx.font = '11px sans-serif';
+          ctx.fillText('ORB', x1 + 4, Math.min(y1, y2) - 4);
+        }
+      }
+
+      // Render FVG zones (fair value gaps)
+      if (annotations.fvgZones && annotations.fvgZones.length > 0) {
+        annotations.fvgZones.forEach((fvg, idx) => {
+          const { fvgStartIdx, fvgEndIdx, fvgHigh, fvgLow } = fvg;
+          if (fvgHigh > 0 && fvgLow > 0) {
+            const x1 = getCandleX(fvgStartIdx);
+            const x2 = getCandleX(fvgEndIdx);
+            const y1 = getPriceY(fvgHigh);
+            const y2 = getPriceY(fvgLow);
+
+            ctx.fillStyle = 'rgba(168, 85, 247, 0.06)'; // purple, very transparent
+            ctx.fillRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
+
+            // FVG borders
+            ctx.strokeStyle = 'rgba(168, 85, 247, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
+            ctx.strokeRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
+            ctx.setLineDash([]);
+
+            // FVG label
+            ctx.fillStyle = 'rgba(168, 85, 247, 0.8)';
+            ctx.font = '10px sans-serif';
+            ctx.fillText(`FVG${idx + 1}`, x1 + 2, Math.min(y1, y2) + 12);
+          }
+        });
+      }
+
+      // Render Order Block zones (if enabled)
+      if (annotations.obZones && annotations.obZones.length > 0) {
+        annotations.obZones.forEach((ob, idx) => {
+          const { obStartIdx, obEndIdx, obHigh, obLow } = ob;
+          if (obHigh > 0 && obLow > 0) {
+            const x1 = getCandleX(obStartIdx);
+            const x2 = getCandleX(obEndIdx);
+            const y1 = getPriceY(obHigh);
+            const y2 = getPriceY(obLow);
+
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.05)'; // green, very transparent
+            ctx.fillRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
+
+            // OB borders
+            ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([1, 1]);
+            ctx.strokeRect(x1, Math.min(y1, y2), x2 - x1, Math.abs(y2 - y1));
+            ctx.setLineDash([]);
+
+            // OB label
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.7)';
+            ctx.font = '10px sans-serif';
+            ctx.fillText(`OB${idx + 1}`, x1 + 2, Math.min(y1, y2) + 24);
+          }
+        });
+      }
+
+      // Render retracement event markers
+      if (annotations.retraceEvent) {
+        const { candleIdx, price } = annotations.retraceEvent;
+        const x = getCandleX(candleIdx);
+        const y = getPriceY(price);
+
+        ctx.fillStyle = 'rgba(251, 146, 60, 0.8)'; // orange
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(10, 10, 15, 0.9)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Render engulfing event marker
+      if (annotations.engulfingEvent) {
+        const { candleIdx, price } = annotations.engulfingEvent;
+        const x = getCandleX(candleIdx);
+        const y = getPriceY(price);
+
+        ctx.fillStyle = 'rgba(52, 211, 153, 0.8)'; // teal
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(10, 10, 15, 0.9)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    }
+
     ctx.restore();
   }, []);
 
   useEffect(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => drawBoxes());
-  }, [trades, selectedTradeId, hoveredTradeId, replayNowMs, drawBoxes]);
+  }, [trades, selectedTradeId, hoveredTradeId, replayNowMs, strategy, annotations, drawBoxes]);
 
   // ─── Create chart (once) ────────────────────────────────────────────────
   useEffect(() => {
@@ -586,8 +738,10 @@ export const BacktestChart = ({
   }, [candles, styledCandles]);
 
   // ─── EMA data ─────────────────────────────────────────────────────────────
+  // Hide EMA lines for ORB_FVG_RETEST strategy; show for all others
   useEffect(() => {
-    if (!emaFastRef.current || !emaSlowRef.current || !indicators.length) return;
+    const isOrbFvgRetest = strategy === 'ORB_FVG_RETEST';
+    if (isOrbFvgRetest || !emaFastRef.current || !emaSlowRef.current || !indicators.length) return;
 
     const dedup = (data: LineData[]) => {
       const seen = new Map<number, LineData>();
@@ -604,7 +758,7 @@ export const BacktestChart = ({
 
     emaFastRef.current.setData(fastData);
     emaSlowRef.current.setData(slowData);
-  }, [indicators]);
+  }, [indicators, strategy]);
 
   // ─── Trade markers ────────────────────────────────────────────────────────
   useEffect(() => {

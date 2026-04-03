@@ -178,6 +178,72 @@ export interface BacktestMetrics {
 export interface BacktestResult {
   trades: BacktestTrade[];
   metrics: BacktestMetrics;
+  annotations?: BacktestAnnotations;
+}
+
+export interface BacktestAnnotations {
+  orbZone?: OrbZone;
+  fvgZones?: FvgZone[];
+  obZones?: OrderBlockZone[];
+  retraceEvent?: ReplayEvent;
+  engulfingEvent?: ReplayEvent;
+  // Legacy support
+  orbs?: OrbAnnotation[];
+  fvgs?: FvgAnnotation[];
+  orderBlocks?: OrderBlockAnnotation[];
+  events?: SignalEventAnnotation[];
+}
+
+export interface OrbZone {
+  orbStartIdx: number;
+  orbEndIdx: number;
+  orbHigh: number;
+  orbLow: number;
+}
+
+export interface FvgZone {
+  fvgStartIdx: number;
+  fvgEndIdx: number;
+  fvgHigh: number;
+  fvgLow: number;
+}
+
+export interface OrderBlockZone {
+  obStartIdx: number;
+  obEndIdx: number;
+  obHigh: number;
+  obLow: number;
+}
+
+export interface ReplayEvent {
+  candleIdx: number;
+  price: number;
+}
+
+export interface OrbAnnotation {
+  timestamp: string;
+  high: number;
+  low: number;
+}
+
+export interface FvgAnnotation {
+  formedAt: string;
+  gapLow: number;
+  gapHigh: number;
+  direction: string;
+}
+
+export interface OrderBlockAnnotation {
+  timestamp: string;
+  high: number;
+  low: number;
+  direction: string;
+}
+
+export interface SignalEventAnnotation {
+  timestamp: string;
+  eventType: string;
+  description: string;
 }
 
 export interface BacktestRequest {
@@ -186,7 +252,7 @@ export interface BacktestRequest {
   to: string;
   initialCapital?: number;
   strategy: {
-    name: 'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED';
+    name: 'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED' | 'SMC_FVG' | 'ORB_FVG_RETEST';
     params: {
       timeframe: number;
       riskPercent: number;
@@ -198,6 +264,7 @@ export interface BacktestRequest {
       slowEMA?: number;
       rsiOverbought?: number;
       rsiOversold?: number;
+      includeOrderBlocks?: boolean;
     };
   };
 }

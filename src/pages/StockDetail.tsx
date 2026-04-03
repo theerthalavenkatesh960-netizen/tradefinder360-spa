@@ -259,6 +259,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const [selectedIndicators, setSelectedIndicators] = useState<IndicatorKey[]>(['rsi', 'macd']);
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const [backtestRequest, setBacktestRequest] = useState<BacktestRequest | null>(null);
+  const [selectedStrategy, setSelectedStrategy] = useState<string>('ORB');
   const [isReplayMode, setIsReplayMode] = useState(false);
   const [isReplayPlaying, setIsReplayPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState<ReplaySpeed>(1);
@@ -415,6 +416,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     setEntryPauseEvent(null);
     replayEntrySeenRef.current.clear();
     replayExitSeenRef.current.clear();
+    
+    setSelectedStrategy(req.strategy.name);
     setBacktestRequest(req);
   };
 
@@ -1438,6 +1441,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                             setIsZoomPaused(true);
                             setEntryPauseEvent(null);
                           }}
+                          strategy={selectedStrategy}
+                          annotations={backtestResult?.annotations}
                         />
 
                         <AnimatePresence>

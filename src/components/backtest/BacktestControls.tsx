@@ -18,6 +18,7 @@ const STRATEGIES = [
   { value: 'EMA_SPEED', label: 'EMA Speed', description: 'Shallow pullback + momentum body' },
   { value: 'EMA_PULLBACK_SPEED', label: 'EMA Pullback + Speed', description: 'Crossover + trend continuation' },
   { value: 'SMC_FVG', label: 'SMC FVG + Order Block', description: 'Fair Value Gap with order blocks' },
+  { value: 'ORB_FVG_RETEST', label: 'ORB + FVG Retest', description: 'Breakout → FVG → Retest → Engulf' },
 ] as const;
 
 const TIMEFRAMES = [
@@ -40,7 +41,7 @@ const TARGET_TYPES = [
 
 export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsProps) => {
   const [expanded, setExpanded] = useState(true);
-  const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED' | 'SMC_FVG'>('ORB');
+  const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED' | 'SMC_FVG' | 'ORB_FVG_RETEST'>('ORB');
   const [from, setFrom] = useState(format(subDays(new Date(), 90), 'yyyy-MM-dd'));
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [timeframe, setTimeframe] = useState(5);
@@ -54,6 +55,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
   const [rsiOverbought, setRsiOverbought] = useState(70);
   const [rsiOversold, setRsiOversold] = useState(30);
   const [capital, setCapital] = useState(100000);
+  const [includeOrderBlocks, setIncludeOrderBlocks] = useState(false);
 
   const handleRun = () => {
     const request: BacktestRequest = {
@@ -74,6 +76,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
           slowEMA: (strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK' || strategy === 'EMA_SPEED' || strategy === 'EMA_PULLBACK_SPEED') ? slowEMA : undefined,
           rsiOverbought: strategy === 'RSI_REVERSAL' ? rsiOverbought : undefined,
           rsiOversold: strategy === 'RSI_REVERSAL' ? rsiOversold : undefined,
+          includeOrderBlocks: strategy === 'ORB_FVG_RETEST' ? includeOrderBlocks : undefined,
         },
       },
     };
@@ -357,6 +360,25 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                             className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
                           />
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {strategy === 'ORB_FVG_RETEST' && (
+                    <div className="mt-3 space-y-2">
+                      <label className="block text-xs font-medium text-gray-400 uppercase tracking-wide">
+                        Replay Overlays
+                      </label>
+                      <div className="flex items-center space-x-3 bg-[#0a0a0f]/40 p-3 rounded-lg border border-gray-800/50">
+                        <input
+                          type="checkbox"
+                          checked={includeOrderBlocks}
+                          onChange={(e) => setIncludeOrderBlocks(e.target.checked)}
+                          className="w-4 h-4 accent-indigo-500 cursor-pointer rounded"
+                        />
+                        <label className="text-xs text-gray-300 cursor-pointer flex-1">
+                          Show Order Blocks in Replay
+                        </label>
                       </div>
                     </div>
                   )}
