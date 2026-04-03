@@ -11,7 +11,7 @@ import {
   createSeriesMarkers,
 } from 'lightweight-charts';
 import { motion, AnimatePresence } from 'framer-motion';
-import { differenceInMinutes } from 'date-fns';
+import { differenceInMinutes, format } from 'date-fns';
 import type { Candle, Indicators, BacktestTrade, BacktestAnnotations } from '../../services/api';
 import { formatPrice, formatUTCToIST } from '../../utils/formatters';
 
@@ -559,6 +559,114 @@ export const BacktestChart = ({
               ctx.beginPath(); ctx.moveTo(x + 5, y - 5); ctx.lineTo(x - 5, y + 5); ctx.stroke();
               break;
             }
+            case 'CONFLUENCE_FAIL': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.fillStyle = 'rgba(234, 88, 12, 0.85)';
+              ctx.beginPath();
+              ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = 'rgba(234, 88, 12, 0.9)';
+              ctx.font = '8px sans-serif';
+              ctx.fillText('CF', x - 6, y + 12);
+              break;
+            }
+            case 'VOLUME_FAIL': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.fillStyle = 'rgba(153, 27, 27, 0.85)';
+              ctx.beginPath();
+              ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = 'rgba(153, 27, 27, 0.9)';
+              ctx.font = '8px sans-serif';
+              ctx.fillText('VF', x - 6, y + 12);
+              break;
+            }
+            case 'ENGULF_FAIL': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.fillStyle = 'rgba(239, 68, 68, 0.7)';
+              ctx.beginPath();
+              ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+              ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              break;
+            }
+            case 'RETEST_CONTINUED': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.fillStyle = 'rgba(251, 146, 60, 0.7)';
+              ctx.beginPath();
+              ctx.arc(x, y + 8, 3, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = 'rgba(251, 146, 60, 0.85)';
+              ctx.font = '8px sans-serif';
+              ctx.fillText('RC', x - 5, y + 18);
+              break;
+            }
+            case 'PHASE_BACK_TO_RETEST': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.fillStyle = 'rgba(59, 130, 246, 0.7)';
+              ctx.beginPath();
+              ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = 'rgba(59, 130, 246, 0.85)';
+              ctx.font = '8px sans-serif';
+              ctx.fillText('BK', x - 5, y - 12);
+              break;
+            }
+            case 'RR_FAILED': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+              ctx.beginPath();
+              ctx.moveTo(x - 4, y - 2);
+              ctx.lineTo(x + 4, y - 2);
+              ctx.lineTo(x, y + 4);
+              ctx.closePath(); ctx.fill();
+              ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+              ctx.font = '8px sans-serif';
+              ctx.fillText('RR', x - 6, y - 6);
+              break;
+            }
+            case 'DRAWDOWN_HALT': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.fillStyle = 'rgba(127, 29, 29, 0.85)';
+              ctx.beginPath();
+              ctx.moveTo(x, y - 5);
+              ctx.lineTo(x - 4, y + 3);
+              ctx.lineTo(x + 4, y + 3);
+              ctx.closePath(); ctx.fill();
+              ctx.fillStyle = 'rgba(127, 29, 29, 0.9)';
+              ctx.font = '8px sans-serif';
+              ctx.fillText('DH', x - 6, y - 8);
+              break;
+            }
+            case 'QTY_FAILED':
+            case 'QTY_FINAL_FAIL': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.fillStyle = 'rgba(202, 138, 4, 0.8)';
+              ctx.beginPath();
+              ctx.moveTo(x - 3, y - 4);
+              ctx.lineTo(x + 3, y - 4);
+              ctx.lineTo(x + 3, y + 4);
+              ctx.lineTo(x - 3, y + 4);
+              ctx.closePath(); ctx.fill();
+              ctx.fillStyle = 'rgba(202, 138, 4, 0.9)';
+              ctx.font = '8px sans-serif';
+              ctx.fillText('QF', x - 5, y + 10);
+              break;
+            }
+            case 'QTY_CAPPED': {
+              const y = getPriceY(c?.close ?? 0);
+              ctx.fillStyle = 'rgba(180, 83, 9, 0.7)';
+              ctx.beginPath();
+              ctx.moveTo(x - 3, y - 4);
+              ctx.lineTo(x + 3, y - 4);
+              ctx.lineTo(x + 3, y + 4);
+              ctx.lineTo(x - 3, y + 4);
+              ctx.closePath(); ctx.fill();
+              ctx.strokeStyle = 'rgba(180, 83, 9, 0.85)';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              ctx.fillStyle = 'rgba(180, 83, 9, 0.9)';
+              ctx.font = '8px sans-serif';
+              ctx.fillText('QC', x - 5, y + 10);
+              break;
+            }
           }
         });
       }
@@ -932,6 +1040,65 @@ export const BacktestChart = ({
   const winCount = trades.filter((trade) => trade.pnl >= 0).length;
   const lossCount = trades.length - winCount;
 
+  // Compute current replay date and status
+  const replayStatus = useMemo(() => {
+    if (!replayNowMs || !candles.length || strategy !== 'ORB_FVG_RETEST') {
+      return { date: '', status: '', eventCount: 0 };
+    }
+
+    // Find current candle
+    const currentCandle = candles.find((c) => new Date(c.timestamp).getTime() <= replayNowMs);
+    if (!currentCandle) {
+      return { date: '', status: '', eventCount: 0 };
+    }
+
+    const date = format(new Date(currentCandle.timestamp), 'MMM dd, yyyy');
+
+    // Determine status from annotations
+    let status = 'Waiting for ORB to form';
+    let eventCount = 0;
+
+    if (!annotations?.events) {
+      return { date, status, eventCount };
+    }
+
+    // Find the latest event at or before the current replay time
+    const currentTimeMs = currentCandle.timestamp;
+    const relevantEvents = annotations.events.filter(
+      (e) => new Date(e.timestamp || currentTimeMs).getTime() <= replayNowMs
+    );
+
+    if (relevantEvents.length === 0) {
+      return { date, status, eventCount: 0 };
+    }
+
+    eventCount = relevantEvents.length;
+    const latestEvent = relevantEvents[relevantEvents.length - 1];
+
+    // Map event type to human-readable status
+    const statusMap: Record<string, string> = {
+      CONFLUENCE_FAIL: 'Confluence check failed (RSI not aligned)',
+      VOLUME_FAIL: 'Volume check failed',
+      BREAKOUT: 'Breakout confirmed — waiting for FVG to form',
+      FVG_FORMED: 'FVG formed — waiting for price retest',
+      RETEST: 'Price retesting FVG',
+      RETEST_CONTINUED: 'Still retesting FVG',
+      ENGULF_FAIL: 'Engulfing check failed',
+      PHASE_BACK_TO_RETEST: 'Price exited FVG — back to retest watch',
+      ENGULF_CONFIRMED: 'Engulfing confirmed — preparing entry',
+      RR_FAILED: 'Risk/Reward too low — entry rejected',
+      DRAWDOWN_HALT: 'Drawdown halt active — no new entries',
+      QTY_FAILED: 'Position size invalid',
+      QTY_CAPPED: 'Position size capped to 20%',
+      ENTRY: 'Trade entered',
+      TRADE_NOT_TAKEN: 'Trade not taken — end of day',
+    };
+
+    status = statusMap[latestEvent.eventType] || latestEvent.eventType || status;
+
+    return { date, status, eventCount };
+  }, [replayNowMs, candles, strategy, annotations]);
+
   const tooltipLeft = tooltip
     ? clamp(tooltip.x + 14, 8, Math.max(8, (containerRef.current?.clientWidth ?? 0) - 236))
     : 0;
@@ -941,12 +1108,29 @@ export const BacktestChart = ({
 
   return (
     <div className="relative bg-[#0a0a0f] rounded-xl overflow-hidden border border-gray-800/50">
-      <div ref={containerRef} className="relative w-full" style={{ cursor: 'crosshair' }}>
+      {replayStatus.date && (
+        <div className="absolute top-0 left-0 right-0 bg-gradient-to-br from-slate-900/60 to-slate-900/40 px-4 py-2.5 border-b border-indigo-500/30 z-30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="text-sm font-semibold text-indigo-400">{replayStatus.date}</div>
+              <div className="h-4 w-px bg-slate-600/40" />
+              <div className="text-sm text-slate-300 max-w-2xl truncate">{replayStatus.status}</div>
+            </div>
+            {replayStatus.eventCount > 0 && (
+              <div className="text-xs text-slate-400 flex items-center space-x-1">
+                <span className="text-indigo-400 font-semibold">{replayStatus.eventCount}</span>
+                <span>event{replayStatus.eventCount !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <div ref={containerRef} className="relative w-full" style={{ cursor: 'crosshair', paddingTop: replayStatus.date ? '2.5rem' : '0' }}>
         <canvas
           ref={overlayRef}
           style={{
             position: 'absolute',
-            top: 0,
+            top: replayStatus.date ? '2.5rem' : '0',
             left: 0,
             pointerEvents: 'none',
             zIndex: 10,
