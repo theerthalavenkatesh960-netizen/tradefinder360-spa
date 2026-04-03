@@ -216,19 +216,14 @@ export const BacktestChart = ({
 
       const alpha = isExited ? (isSelected ? 0.18 : isHovered ? 0.1 : 0.05) : isSelected ? 0.14 : 0.06;
       const strokeAlpha = isExited ? (isSelected ? 0.8 : isHovered ? 0.6 : 0.3) : isSelected ? 0.75 : 0.45;
+      // LONG = sky blue  |  SHORT = orange-amber
+      const isLong = trade.tradeType === 'LONG';
+      const tradeR = isLong ? '14, 165, 233' : '249, 115, 22';
 
-      ctx.fillStyle = isExited
-        ? isWin
-        ? `rgba(34, 197, 94, ${alpha})`
-        : `rgba(239, 68, 68, ${alpha})`
-        : `rgba(99, 102, 241, ${alpha})`;
+      ctx.fillStyle = `rgba(${tradeR}, ${alpha})`;
       ctx.fillRect(rectX, rectY, rectW, rectH);
 
-      ctx.strokeStyle = isExited
-        ? isWin
-        ? `rgba(34, 197, 94, ${strokeAlpha})`
-        : `rgba(239, 68, 68, ${strokeAlpha})`
-        : `rgba(99, 102, 241, ${strokeAlpha})`;
+      ctx.strokeStyle = `rgba(${tradeR}, ${strokeAlpha})`;
       ctx.lineWidth = isSelected ? 1.5 : 1;
       ctx.strokeRect(rectX, rectY, rectW, rectH);
 
@@ -280,7 +275,8 @@ export const BacktestChart = ({
 
     // Draw swim lanes after boxes so they stay visible on top.
     for (const lane of lanes) {
-      const lineColor = lane.tradeType === 'LONG' ? 'rgba(99, 102, 241, 0.95)' : 'rgba(249, 115, 22, 0.95)';
+      // LONG = sky blue, SHORT = orange-amber — matches box colour scheme
+      const lineColor = lane.tradeType === 'LONG' ? 'rgba(14, 165, 233, 0.95)' : 'rgba(249, 115, 22, 0.95)';
       const direction = lane.xEnd >= lane.xStart ? 1 : -1;
 
       ctx.beginPath();
@@ -314,16 +310,18 @@ export const BacktestChart = ({
         ctx.lineTo(lane.xStart + markerSize * 0.7, lane.yEntry - markerSize * 0.7);
       }
       ctx.closePath();
-      ctx.fillStyle = lane.tradeType === 'LONG' ? '#22c55e' : '#ef4444';
+      // Entry triangle: sky blue for LONG, orange-amber for SHORT
+      ctx.fillStyle = lane.tradeType === 'LONG' ? '#38bdf8' : '#fb923c';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(10, 10, 15, 0.95)';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(10, 10, 15, 0.9)';
+      ctx.lineWidth = 1.2;
       ctx.stroke();
 
       if (lane.isExited) {
         ctx.beginPath();
         ctx.arc(lane.xEnd, lane.yEntry, 3.4, 0, Math.PI * 2);
-        ctx.fillStyle = lane.isWin ? '#22c55e' : '#ef4444';
+        // Exit dot: green = win, rose-red = loss — outcome at a glance
+        ctx.fillStyle = lane.isWin ? '#4ade80' : '#f87171';
         ctx.fill();
         ctx.strokeStyle = 'rgba(10, 10, 15, 0.95)';
         ctx.lineWidth = 1;

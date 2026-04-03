@@ -264,10 +264,12 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const [replaySpeed, setReplaySpeed] = useState<ReplaySpeed>(1);
   const [replayIndex, setReplayIndex] = useState(0);
   const [isReplayFollowOn, setIsReplayFollowOn] = useState(true);
+  const [pauseOnTradeEntry, setPauseOnTradeEntry] = useState(true);
   const [isZoomPaused, setIsZoomPaused] = useState(false);
   const [replayStartIndex, setReplayStartIndex] = useState(0);
   const [replayEvents, setReplayEvents] = useState<ReplayEvent[]>([]);
   const [activeReplayEvent, setActiveReplayEvent] = useState<ReplayEvent | null>(null);
+  const [entryPauseEvent, setEntryPauseEvent] = useState<ReplayEvent | null>(null);
   const indicatorMenuRef = useRef<HTMLDivElement>(null);
   const replayFrameRef = useRef<number | null>(null);
   const replayLastTsRef = useRef<number | null>(null);
@@ -410,6 +412,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     
     setReplayEvents([]);
     setActiveReplayEvent(null);
+    setEntryPauseEvent(null);
     replayEntrySeenRef.current.clear();
     replayExitSeenRef.current.clear();
     setBacktestRequest(req);
@@ -441,6 +444,11 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     [exitedTrades]
   );
 
+  const pausedEntryTrade = useMemo(() => {
+    if (!entryPauseEvent) return null;
+    return allBacktestTrades.find((trade) => trade.id === entryPauseEvent.tradeId) ?? null;
+  }, [allBacktestTrades, entryPauseEvent]);
+
   const visibleEquityCurve = useMemo(() => {
     const fullCurve = backtestResult?.metrics.equityCurve ?? [];
     if (!isReplayMode || replayNowMs === null || !fullCurve.length) return fullCurve;
@@ -456,6 +464,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     setReplayIndex(replayStartIndex);
     setReplayEvents([]);
     setActiveReplayEvent(null);
+    setEntryPauseEvent(null);
     replayEntrySeenRef.current.clear();
     replayExitSeenRef.current.clear();
   };
@@ -469,6 +478,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     setReplayIndex(replayStartIndex);
     setReplayEvents([]);
     setActiveReplayEvent(null);
+    setEntryPauseEvent(null);
     replayEntrySeenRef.current.clear();
     replayExitSeenRef.current.clear();
   }, [backtestResult, replayTotalCandles, replayStartIndex]);
@@ -535,6 +545,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     if (!isReplayMode || replayNowMs === null || !backtestResult) return;
 
     const nextEvents: ReplayEvent[] = [];
+    const nextEntryEvents: ReplayEvent[] = [];
 
     for (const trade of backtestResult.trades) {
       const entryMs = new Date(trade.entryTime).getTime();
@@ -546,13 +557,15 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
         const reward = Math.abs(trade.target - trade.entryPrice);
         const riskReward = risk > 0 ? (reward / risk).toFixed(2) : 'N/A';
         const qty = trade.quantity ? ` @ ${trade.quantity} qty` : '';
-        nextEvents.push({
+        const entryEvent: ReplayEvent = {
           id: `${trade.id}:entry`,
           type: 'trade_placed',
           tradeId: trade.id,
           at: trade.entryTime,
           message: `Entry: ${trade.tradeType} @ ${formatPrice(trade.entryPrice)} | RR: ${riskReward}${qty}`,
-        });
+        };
+        nextEvents.push(entryEvent);
+        nextEntryEvents.push(entryEvent);
       }
 
       if (exitMs <= replayNowMs && !replayExitSeenRef.current.has(trade.id)) {
@@ -575,15 +588,30 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
     nextEvents.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
     const latest = nextEvents[nextEvents.length - 1];
+    const latestEntryEvent = nextEntryEvents[nextEntryEvents.length - 1] ?? null;
 
     setReplayEvents((prev) => [...nextEvents.reverse(), ...prev].slice(0, 20));
+
+    if (pauseOnTradeEntry && isReplayPlaying && latestEntryEvent) {
+      setIsReplayPlaying(false);
+      setIsZoomPaused(false);
+      setActiveReplayEvent(latestEntryEvent);
+      setEntryPauseEvent(latestEntryEvent);
+      if (replayEventClearRef.current !== null) {
+        window.clearTimeout(replayEventClearRef.current);
+        replayEventClearRef.current = null;
+      }
+      return;
+    }
+
+    setEntryPauseEvent(null);
     setActiveReplayEvent(latest);
 
     if (replayEventClearRef.current !== null) {
       window.clearTimeout(replayEventClearRef.current);
     }
     replayEventClearRef.current = window.setTimeout(() => setActiveReplayEvent(null), 1800);
-  }, [isReplayMode, replayNowMs, backtestResult]);
+  }, [isReplayMode, replayNowMs, backtestResult, pauseOnTradeEntry, isReplayPlaying]);
 
   useEffect(() => {
     if (!selectedTradeId || !isReplayMode) return;
@@ -1240,6 +1268,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                             setIsReplayMode(true);
                             setIsReplayFollowOn(true);
                             setIsZoomPaused(false);
+                            setEntryPauseEvent(null);
+                            setActiveReplayEvent(null);
                             setSelectedTrade(null);
                           }}
                           className={`px-3 py-1 rounded-lg text-xs font-semibold border transition ${
@@ -1255,6 +1285,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                             setIsReplayMode(false);
                             setIsReplayPlaying(false);
                             setIsZoomPaused(false);
+                            setEntryPauseEvent(null);
                             setActiveReplayEvent(null);
                           }}
                           className={`px-3 py-1 rounded-lg text-xs font-semibold border transition ${
@@ -1272,6 +1303,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           onClick={() => {
                             if (!isReplayPlaying) {
                               setIsZoomPaused(false);
+                              setEntryPauseEvent(null);
+                              setActiveReplayEvent(null);
                             }
                             setIsReplayPlaying((prev) => !prev);
                           }}
@@ -1312,6 +1345,12 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           </span>
                         )}
 
+                        {isReplayMode && entryPauseEvent && !isReplayPlaying && (
+                          <span className="text-xs px-2 py-1 rounded-md border text-sky-200 bg-sky-500/10 border-sky-500/30">
+                            Paused (Trade Entry)
+                          </span>
+                        )}
+
                         {isReplayMode && (
                           <span className="text-xs text-gray-400 px-2">
                             Candle {Math.min(replayIndex + 1, Math.max(1, replayTotalCandles))} / {Math.max(1, replayTotalCandles)}
@@ -1329,6 +1368,18 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           >
                             Follow {isReplayFollowOn ? 'On' : 'Off'}
                           </button>
+                        )}
+
+                        {isReplayMode && (
+                          <label className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-xs font-medium border border-gray-700/60 bg-gray-900/30 text-gray-300 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={pauseOnTradeEntry}
+                              onChange={(e) => setPauseOnTradeEntry(e.target.checked)}
+                              className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-900 text-sky-400 focus:ring-sky-500/40"
+                            />
+                            Pause on Trade Entry
+                          </label>
                         )}
 
                         {isReplayMode && (
@@ -1351,6 +1402,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                             onChange={(e) => {
                               setIsReplayPlaying(false);
                               setIsZoomPaused(false);
+                              setEntryPauseEvent(null);
+                              setActiveReplayEvent(null);
                               setReplayIndex(parseInt(e.target.value, 10));
                             }}
                             disabled={isReplayPlaying}
@@ -1383,11 +1436,12 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           onReplayPauseFromZoom={() => {
                             setIsReplayPlaying(false);
                             setIsZoomPaused(true);
+                            setEntryPauseEvent(null);
                           }}
                         />
 
                         <AnimatePresence>
-                          {isReplayMode && activeReplayEvent && (
+                          {isReplayMode && activeReplayEvent && !entryPauseEvent && (
                             <motion.div
                               key={activeReplayEvent.id}
                               initial={{ opacity: 0, y: -8, scale: 0.96 }}
@@ -1397,6 +1451,72 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                               className="absolute top-3 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-lg border border-indigo-500/30 bg-[#101225]/90 text-xs text-indigo-100 shadow-lg"
                             >
                               {activeReplayEvent.message}
+                            </motion.div>
+                          )}
+
+                          {isReplayMode && entryPauseEvent && pausedEntryTrade && (
+                            <motion.div
+                              key={`entry-pause-${entryPauseEvent.id}`}
+                              initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                              transition={{ duration: 0.18 }}
+                              className="absolute top-3 left-1/2 -translate-x-1/2 z-40 w-[min(92%,30rem)] rounded-xl border border-sky-500/35 bg-[#0b1324]/95 shadow-2xl"
+                            >
+                              <div className="flex items-center justify-between border-b border-sky-500/20 px-4 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold uppercase tracking-wide text-sky-200">Order Triggered</span>
+                                  <span className={`text-[11px] px-2 py-0.5 rounded border ${pausedEntryTrade.tradeType === 'LONG' ? 'text-sky-200 border-sky-400/40 bg-sky-500/10' : 'text-orange-200 border-orange-400/40 bg-orange-500/10'}`}>
+                                    {pausedEntryTrade.tradeType}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    setEntryPauseEvent(null);
+                                    setActiveReplayEvent(null);
+                                  }}
+                                  className="text-xs text-gray-400 hover:text-white transition"
+                                >
+                                  Dismiss
+                                </button>
+                              </div>
+
+                              <div className="px-4 py-3 space-y-2">
+                                <p className="text-xs text-sky-100">{entryPauseEvent.message}</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                                  <div className="rounded-md border border-gray-700/70 bg-gray-900/50 px-2 py-1.5">
+                                    <p className="text-gray-400">Entry</p>
+                                    <p className="text-white font-semibold">{formatPrice(pausedEntryTrade.entryPrice)}</p>
+                                  </div>
+                                  <div className="rounded-md border border-gray-700/70 bg-gray-900/50 px-2 py-1.5">
+                                    <p className="text-gray-400">Stop Loss</p>
+                                    <p className="text-red-300 font-semibold">{formatPrice(pausedEntryTrade.stopLoss)}</p>
+                                  </div>
+                                  <div className="rounded-md border border-gray-700/70 bg-gray-900/50 px-2 py-1.5">
+                                    <p className="text-gray-400">Target</p>
+                                    <p className="text-emerald-300 font-semibold">{formatPrice(pausedEntryTrade.target)}</p>
+                                  </div>
+                                  <div className="rounded-md border border-gray-700/70 bg-gray-900/50 px-2 py-1.5">
+                                    <p className="text-gray-400">Qty</p>
+                                    <p className="text-white font-semibold">{pausedEntryTrade.quantity || '--'}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between pt-1">
+                                  <span className="text-[11px] text-gray-400">Replay paused on order entry.</span>
+                                  <button
+                                    onClick={() => {
+                                      setEntryPauseEvent(null);
+                                      setActiveReplayEvent(null);
+                                      setIsZoomPaused(false);
+                                      setIsReplayPlaying(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border border-sky-500/40 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25 transition"
+                                  >
+                                    <Play className="w-3.5 h-3.5" />
+                                    Continue Replay
+                                  </button>
+                                </div>
+                              </div>
                             </motion.div>
                           )}
                         </AnimatePresence>

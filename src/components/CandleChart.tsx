@@ -3,9 +3,6 @@ import {
   createChart,
   IChartApi,
   ISeriesApi,
-  CandlestickData,
-  LineData,
-  HistogramData,
   CandlestickSeries,
   LineSeries,
   HistogramSeries,
@@ -42,6 +39,8 @@ export const CandleChart = ({
 }: CandleChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const legendRef = useRef<HTMLDivElement>(null);
+  const showFlagsRef = useRef({ showEMA, showBollinger, showRSI, showMACD });
 
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const emaFastSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -65,6 +64,11 @@ export const CandleChart = ({
     data.forEach((d) => map.set(d.time, d));
     return Array.from(map.values()).sort((a, b) => a.time - b.time);
   };
+
+  // Keep showFlags ref in sync so the crosshair handler always reads latest values
+  useEffect(() => {
+    showFlagsRef.current = { showEMA, showBollinger, showRSI, showMACD };
+  }, [showEMA, showBollinger, showRSI, showMACD]);
 
   // 🚀 INIT CHART
   useEffect(() => {
@@ -145,6 +149,85 @@ export const CandleChart = ({
     macdLineSeriesRef.current = macdLine;
     macdSignalSeriesRef.current = macdSignal;
     macdHistogramSeriesRef.current = macdHist;
+
+    // 🖱 CROSSHAIR LEGEND — update top-left overlay on mouse move
+    chart.subscribeCrosshairMove((param) => {
+      const legend = legendRef.current;
+      if (!legend) return;
+
+      if (!param.time || !param.point || param.point.x <= 0 || param.point.y <= 0) {
+        legend.style.display = 'none';
+        return;
+      }
+
+      legend.style.display = 'block';
+      const flags = showFlagsRef.current;
+      const lines: string[] = [];
+
+      // OHLC row
+      const bar = param.seriesData.get(candleSeries) as any;
+      if (bar) {
+        const bullish = bar.close >= bar.open;
+        const priceColor = bullish ? '#22c55e' : '#ef4444';
+        lines.push(
+          `<span style="color:#6b7280">O</span><span style="color:${priceColor}"> ${bar.open.toFixed(2)}</span>` +
+          `  <span style="color:#6b7280">H</span><span style="color:#22c55e"> ${bar.high.toFixed(2)}</span>` +
+          `  <span style="color:#6b7280">L</span><span style="color:#ef4444"> ${bar.low.toFixed(2)}</span>` +
+          `  <span style="color:#6b7280">C</span><span style="color:${priceColor}"> ${bar.close.toFixed(2)}</span>`
+        );
+      }
+
+      // EMA
+      if (flags.showEMA) {
+        const fast = param.seriesData.get(emaFastSeries) as any;
+        const slow = param.seriesData.get(emaSlowSeries) as any;
+        const parts: string[] = [];
+        if (fast?.value != null) parts.push(`<span style="color:#6b7280">EMA Fast</span> <span style="color:#3b82f6">${fast.value.toFixed(2)}</span>`);
+        if (slow?.value != null) parts.push(`<span style="color:#6b7280">EMA Slow</span> <span style="color:#f97316">${slow.value.toFixed(2)}</span>`);
+        if (parts.length) lines.push(parts.join('  '));
+      }
+
+      // Bollinger Bands
+      if (flags.showBollinger) {
+        const upper = param.seriesData.get(bbUpperSeries) as any;
+        const mid = param.seriesData.get(bbMiddleSeries) as any;
+        const lower = param.seriesData.get(bbLowerSeries) as any;
+        if (upper?.value != null) {
+          lines.push(
+            `<span style="color:#6b7280">BB</span>` +
+            `  <span style="color:#6b7280">U</span><span style="color:#ef4444"> ${upper.value.toFixed(2)}</span>` +
+            `  <span style="color:#6b7280">M</span><span style="color:#f59e0b"> ${mid?.value?.toFixed(2) ?? '—'}</span>` +
+            `  <span style="color:#6b7280">L</span><span style="color:#22c55e"> ${lower?.value?.toFixed(2) ?? '—'}</span>`
+          );
+        }
+      }
+
+      // RSI
+      if (flags.showRSI) {
+        const rsiData = param.seriesData.get(rsiSeries) as any;
+        if (rsiData?.value != null) {
+          const v = rsiData.value;
+          const c = v >= 70 ? '#ef4444' : v <= 30 ? '#22c55e' : '#8b5cf6';
+          lines.push(`<span style="color:#6b7280">RSI</span> <span style="color:${c}">${v.toFixed(2)}</span>`);
+        }
+      }
+
+      // MACD
+      if (flags.showMACD) {
+        const mLine = param.seriesData.get(macdLine) as any;
+        const mSig = param.seriesData.get(macdSignal) as any;
+        const mHist = param.seriesData.get(macdHist) as any;
+        if (mLine?.value != null) {
+          lines.push(
+            `<span style="color:#6b7280">MACD</span> <span style="color:#22c55e">${mLine.value.toFixed(2)}</span>` +
+            (mSig?.value != null ? `  <span style="color:#6b7280">Sig</span> <span style="color:#ef4444">${mSig.value.toFixed(2)}</span>` : '') +
+            (mHist?.value != null ? `  <span style="color:#6b7280">Hist</span> <span style="color:${mHist.value >= 0 ? '#22c55e' : '#ef4444'}">${mHist.value.toFixed(2)}</span>` : '')
+          );
+        }
+      }
+
+      legend.innerHTML = lines.join('<br/>');
+    });
 
     const handleResize = () => {
       chart.applyOptions({
@@ -318,5 +401,14 @@ export const CandleChart = ({
     createSeriesMarkers(candleSeriesRef.current, allMarkers);
   }, [buySignals, sellSignals]);
 
-  return <div ref={chartContainerRef} className="w-full h-[78vh] min-h-[560px]" />;
+  return (
+    <div className="relative w-full h-[78vh] min-h-[560px]">
+      <div ref={chartContainerRef} className="absolute inset-0" />
+      <div
+        ref={legendRef}
+        style={{ display: 'none', background: 'rgba(10,10,15,0.72)', fontFamily: 'monospace' }}
+        className="absolute top-2 left-2 z-10 pointer-events-none text-xs leading-relaxed px-2 py-1.5 rounded border border-white/10 backdrop-blur-sm"
+      />
+    </div>
+  );
 };
