@@ -183,6 +183,30 @@ export const BacktestMetricsBar = ({ metrics }: Props) => {
         iconClass="bg-indigo-500/10 text-indigo-400"
         delay={0.4}
       />
+
+      {metrics.finalCapital !== undefined && metrics.initialCapital !== undefined && (
+        <MetricCard
+          label="Final Capital"
+          value={formatPrice(metrics.finalCapital)}
+          valueClassName={metrics.finalCapital >= metrics.initialCapital ? 'text-green-400' : 'text-red-400'}
+          sub={<p className="text-xs text-gray-500">from {formatPrice(metrics.initialCapital)}</p>}
+          icon={DollarSign}
+          iconClass="bg-emerald-500/10 text-emerald-400"
+          delay={0.45}
+        />
+      )}
+
+      {metrics.avgWinPnl !== undefined && metrics.avgLossPnl !== undefined && (
+        <MetricCard
+          label="Avg Win / Loss"
+          value={formatPrice(metrics.avgWinPnl)}
+          valueClassName="text-green-400"
+          sub={<p className="text-xs text-red-400">{formatPrice(metrics.avgLossPnl)} avg loss</p>}
+          icon={BarChart2}
+          iconClass="bg-green-500/10 text-green-400"
+          delay={0.5}
+        />
+      )}
     </div>
   );
 };

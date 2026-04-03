@@ -15,6 +15,8 @@ const STRATEGIES = [
   { value: 'RSI_REVERSAL', label: 'RSI Reversal', description: 'Overbought/oversold reversal' },
   { value: 'EMA_CROSSOVER', label: 'EMA Crossover', description: 'Fast/slow EMA cross' },
   { value: 'EMA_PULLBACK', label: 'EMA Pullback', description: 'Crossover + retest entry' },
+  { value: 'EMA_SPEED', label: 'EMA Speed', description: 'Shallow pullback + momentum body' },
+  { value: 'EMA_PULLBACK_SPEED', label: 'EMA Pullback + Speed', description: 'Crossover + trend continuation' },
   { value: 'SMC_FVG', label: 'SMC FVG + Order Block', description: 'Fair Value Gap with order blocks' },
 ] as const;
 
@@ -38,7 +40,7 @@ const TARGET_TYPES = [
 
 export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsProps) => {
   const [expanded, setExpanded] = useState(true);
-  const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'SMC_FVG'>('ORB');
+  const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED' | 'SMC_FVG'>('ORB');
   const [from, setFrom] = useState(format(subDays(new Date(), 90), 'yyyy-MM-dd'));
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [timeframe, setTimeframe] = useState(5);
@@ -51,12 +53,14 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
   const [slowEMA, setSlowEMA] = useState(21);
   const [rsiOverbought, setRsiOverbought] = useState(70);
   const [rsiOversold, setRsiOversold] = useState(30);
+  const [capital, setCapital] = useState(100000);
 
   const handleRun = () => {
     const request: BacktestRequest = {
       symbol,
       from,
       to,
+      initialCapital: capital,
       strategy: {
         name: strategy,
         params: {
@@ -66,8 +70,8 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
           targetType,
           rrRatio: targetType === 'RR_RATIO' ? rrRatio : undefined,
           slPercent: slType === 'FIXED_PERCENT' ? slPercent : undefined,
-          fastEMA: (strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK') ? fastEMA : undefined,
-          slowEMA: (strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK') ? slowEMA : undefined,
+          fastEMA: (strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK' || strategy === 'EMA_SPEED' || strategy === 'EMA_PULLBACK_SPEED') ? fastEMA : undefined,
+          slowEMA: (strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK' || strategy === 'EMA_SPEED' || strategy === 'EMA_PULLBACK_SPEED') ? slowEMA : undefined,
           rsiOverbought: strategy === 'RSI_REVERSAL' ? rsiOverbought : undefined,
           rsiOversold: strategy === 'RSI_REVERSAL' ? rsiOversold : undefined,
         },
@@ -193,6 +197,19 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                   </div>
 
                   <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
+                    Trading Capital (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    max="100000000"
+                    step="1000"
+                    value={capital}
+                    onChange={(e) => setCapital(Math.max(1000, parseInt(e.target.value) || 100000))}
+                    className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50 mb-3"
+                  />
+
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
                     Risk per Trade (%)
                   </label>
                   <div className="flex items-center space-x-2">
@@ -280,7 +297,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                     </>
                   )}
 
-                  {(strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK') && (
+                  {(strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK' || strategy === 'EMA_SPEED' || strategy === 'EMA_PULLBACK_SPEED') && (
                     <div className="mt-3 space-y-2">
                       <label className="block text-xs font-medium text-gray-400 uppercase tracking-wide">
                         EMA Periods

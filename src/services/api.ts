@@ -169,6 +169,10 @@ export interface BacktestMetrics {
   totalReturn?: number;
   profitFactor?: number;
   equityCurve: EquityPoint[];
+  initialCapital?: number;
+  finalCapital?: number;
+  avgWinPnl?: number;
+  avgLossPnl?: number;
 }
 
 export interface BacktestResult {
@@ -180,8 +184,9 @@ export interface BacktestRequest {
   symbol: string;
   from: string;
   to: string;
+  initialCapital?: number;
   strategy: {
-    name: 'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK';
+    name: 'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED';
     params: {
       timeframe: number;
       riskPercent: number;
