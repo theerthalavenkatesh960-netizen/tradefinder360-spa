@@ -71,17 +71,29 @@ export const MarketInsightsToday = () => {
     }
   }, [sentiment, setSentiment]);
 
-  const { data: opportunities = [], isLoading: isOpportunitiesLoading } = useQuery({
+  const {
+    data: opportunities = [],
+    isLoading: isOpportunitiesLoading,
+    isError: isOpportunitiesError,
+  } = useQuery({
     queryKey: ['radar-top-insights'],
     queryFn: () => api.radar.getTop(60, 8),
   });
 
-  const { data: recommendations = [], isLoading: isRecommendationsLoading } = useQuery({
+  const {
+    data: recommendations = [],
+    isLoading: isRecommendationsLoading,
+    isError: isRecommendationsError,
+  } = useQuery({
     queryKey: ['recommendations-top-insights'],
     queryFn: () => api.recommendations.getTop(6, 1.2, 55),
   });
 
-  const { data: gainersResponse, isLoading: isGainersLoading } = useQuery({
+  const {
+    data: gainersResponse,
+    isLoading: isGainersLoading,
+    isError: isGainersError,
+  } = useQuery({
     queryKey: ['movers-gainers'],
     queryFn: () =>
       api.instruments.search({
@@ -94,7 +106,11 @@ export const MarketInsightsToday = () => {
       }),
   });
 
-  const { data: losersResponse, isLoading: isLosersLoading } = useQuery({
+  const {
+    data: losersResponse,
+    isLoading: isLosersLoading,
+    isError: isLosersError,
+  } = useQuery({
     queryKey: ['movers-losers'],
     queryFn: () =>
       api.instruments.search({
@@ -109,6 +125,7 @@ export const MarketInsightsToday = () => {
 
   const gainers = gainersResponse?.items ?? [];
   const losers = losersResponse?.items ?? [];
+  const isMoversError = isGainersError || isLosersError;
 
   const marketInsight = useMemo(
     () =>
@@ -223,6 +240,15 @@ export const MarketInsightsToday = () => {
               confidence={marketInsight.confidence}
               explanation={marketInsight.explanation}
             />
+            {isRecommendationsError && (
+              <div className="mt-3">
+                <InsightBanner
+                  title="Recommendation feed unavailable"
+                  message="Action guidance is using fallback market logic because recommendation data could not be fetched."
+                  tone="warning"
+                />
+              </div>
+            )}
           </section>
 
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -287,6 +313,15 @@ export const MarketInsightsToday = () => {
                 {!losers.length && <p className="text-sm text-gray-400">No losers available right now.</p>}
               </div>
             </div>
+            {isMoversError && (
+              <div className="lg:col-span-2">
+                <InsightBanner
+                  title="Movers feed unavailable"
+                  message="Top gainers or losers could not be loaded. Market summary and action recommendation are still available."
+                  tone="warning"
+                />
+              </div>
+            )}
           </section>
 
           <section className="bg-[#12121a]/50 backdrop-blur-xl border border-gray-800/50 rounded-xl p-6">
@@ -382,6 +417,15 @@ export const MarketInsightsToday = () => {
                 </a>
               ))}
             </div>
+            {isOpportunitiesError && (
+              <div className="mt-3">
+                <InsightBanner
+                  title="Opportunities feed unavailable"
+                  message="Trending opportunities could not be fetched right now. Try refreshing after a minute."
+                  tone="warning"
+                />
+              </div>
+            )}
             {!opportunities.length && (
               <p className="text-sm text-gray-400 mt-3">No opportunities passed the current quality threshold.</p>
             )}
