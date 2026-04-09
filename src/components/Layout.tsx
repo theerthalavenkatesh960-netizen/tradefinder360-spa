@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard,
+  Lightbulb,
   Search,
   TrendingUp,
   Star,
@@ -27,7 +27,7 @@ export const Layout = ({ children }: LayoutProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Market Insights', href: '/', icon: Lightbulb },
     { name: 'Stocks', href: '/stocks', icon: Search },
     { name: 'Radar', href: '/radar', icon: RadarIcon },
     { name: 'Portfolio', href: '/portfolio', icon: Briefcase },

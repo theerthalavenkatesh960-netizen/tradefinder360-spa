@@ -127,6 +127,102 @@ export interface MarketSentiment {
   }>;
 }
 
+export interface MarketSentimentOverview {
+  timestamp: string;
+  sentiment: 'STRONGLY_BULLISH' | 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'STRONGLY_BEARISH';
+  sentimentScore: number;
+  sentimentDescription: string;
+  volatility: {
+    index: number;
+    level: 'LOW' | 'MODERATE' | 'HIGH' | 'EXTREME';
+    impact: string;
+  };
+  breadth: {
+    advanceDeclineRatio: number;
+    stocksAdvancing: number;
+    stocksDeclining: number;
+    stocksUnchanged: number;
+    interpretation: string;
+  };
+  majorIndices: Array<{
+    name: string;
+    symbol: string;
+    currentValue: number;
+    changePercent: number;
+    dayHigh: number;
+    dayLow: number;
+    trend: string;
+  }>;
+  sectors: Array<{
+    name: string;
+    changePercent: number;
+    stocksAdvancing: number;
+    stocksDeclining: number;
+    relativeStrength: number;
+    performance: string;
+  }>;
+  keyFactors: string[];
+  summary: string;
+}
+
+export interface InstrumentSearchRequest {
+  search?: string;
+  exchange?: string;
+  sector?: string;
+  industry?: string;
+  instrumentType?: string;
+  derivativesEnabled?: boolean;
+  trend?: string;
+  minSetupScore?: number;
+  minAdx?: number;
+  rsiBelow?: number;
+  rsiAbove?: number;
+  minMarketCap?: number;
+  maxMarketCap?: number;
+  minChangePercent?: number;
+  maxChangePercent?: number;
+  hasRecommendation?: boolean;
+  priceTimeframe?: string;
+  scanTimeframe?: number;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface InstrumentSearchItem {
+  id: number;
+  name: string;
+  symbol: string;
+  exchange: string;
+  instrumentKey: string;
+  sector?: string;
+  industry?: string;
+  marketCap?: number;
+  instrumentType?: string;
+  isDerivativesEnabled: boolean;
+  price?: number;
+  volume?: number;
+  change?: number;
+  changePercent?: number;
+  trend?: string;
+  entryPrice?: number;
+  exitPrice?: number;
+  stopLoss?: number;
+  expectedProfit?: number;
+  confidence?: number;
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
 export interface PortfolioPosition {
   symbol: string;
   allocationPercent: number;
@@ -361,6 +457,18 @@ export const api = {
       if (!response.ok) throw new Error('Failed to fetch indicators');
       return response.json();
     },
+
+    search: async (
+      request: InstrumentSearchRequest
+    ): Promise<PaginatedResult<InstrumentSearchItem>> => {
+      const response = await fetch(`${API_BASE_URL}/instrument/search`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(request),
+      });
+      if (!response.ok) throw new Error('Failed to search instruments');
+      return response.json();
+    },
   },
 
   candles: {
@@ -402,6 +510,14 @@ export const api = {
         headers: getHeaders(),
       });
       if (!response.ok) throw new Error('Failed to fetch market sentiment');
+      return response.json();
+    },
+
+    getSentimentOverview: async (): Promise<MarketSentimentOverview> => {
+      const response = await fetch(`${API_BASE_URL}/market/sentiment`, {
+        headers: getHeaders(),
+      });
+      if (!response.ok) throw new Error('Failed to fetch market sentiment overview');
       return response.json();
     },
   },
