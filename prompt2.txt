@@ -1,121 +1,171 @@
-Role: You are a Senior Full-Stack Developer and Financial Systems Architect specializing in real-time trading dashboards for Indian equity markets.
-Goal: Build a production-grade Indian Stock Market Analysis "Cockpit" Dashboard as a single-file React JSX artifact. A trader must be able to assess market health in under 30 seconds.
+Here's your complete Copilot prompt:
 
-🎨 Design System
-Follow the existing UI's styling conventions throughout — reuse its color palette, font choices, card styles, spacing, and component patterns. Do not introduce a new design language. Only make independent styling decisions for the following elements that have no existing equivalent:
+Role: You are a Senior Full-Stack Developer building a production-grade Trading Education Platform for Indian retail traders. The platform teaches Smart Money Concepts (SMC) and Price Action exclusively for Nifty 50 and Bank Nifty.
+Tech Stack: React + TypeScript frontend, Node.js/Express backend, PostgreSQL database, Tailwind CSS. Deploy-ready structure with proper folder organization.
 
-The VIX needle gauge (SVG semi-circle — hand-coded)
-The Sector Heatmap blocks (color scale: deep green → muted green → muted red → deep red based on % change)
-The A/D stacked bar (green | gray | red segments inline)
-The Glassmorphism tooltip on ⓘ icons (backdrop-filter: blur(12px), dark semi-transparent bg, white text, soft border, max-width 260px)
+🎯 Product Vision
+Build a course platform called "SMC Mastery — Nifty & BankNifty" where users progress through structured modules, get tested on real chart scenarios, and unlock the next module only after passing. The platform uses the Anthropic Claude API to dynamically generate advanced test questions, chart scenarios, and detailed explanations — so the question bank is effectively infinite and always unique.
 
-For everything else — cards, headers, badges, charts, buttons, fonts, spacing — inherit directly from the existing UI.
+🗄️ Database Schema (PostgreSQL)
+sqlusers (id, email, name, password_hash, created_at, last_login)
 
-📦 Data Layer
-Use the Anthropic API (claude-sonnet-4-20250514) to simulate realistic, market-consistent data for all modules. On mount, make one structured API call with this system prompt:
-You are a financial data simulator for Indian markets. Return ONLY a valid JSON object (no markdown, no explanation) with this exact schema for a realistic market session:
-{
-  "timestamp": "ISO string",
-  "giftNifty": { "price": number, "change": number, "changePct": number },
-  "brentCrude": { "price": number, "change": number, "changePct": number },
-  "usdInr": { "price": number, "change": number, "changePct": number },
-  "us10yYield": { "price": number, "change": number, "changePct": number },
-  "fii": { "buy": number, "sell": number, "net": number },
-  "dii": { "buy": number, "sell": number, "net": number },
-  "advanceDecline": { "advances": number, "declines": number, "unchanged": number },
-  "indiaVix": { "value": number, "change": number },
-  "sectors": [
-    { "name": "Nifty Bank", "changePct": number, "weight": number },
-    { "name": "Nifty IT", "changePct": number, "weight": number },
-    { "name": "Nifty Pharma", "changePct": number, "weight": number },
-    { "name": "Nifty Auto", "changePct": number, "weight": number },
-    { "name": "Nifty Defense", "changePct": number, "weight": number },
-    { "name": "Nifty FMCG", "changePct": number, "weight": number }
-  ]
-}
-Show skeleton loaders (matching existing UI skeleton style if any, otherwise simple pulse animation) while the API call is in progress. Parse and render all four modules from this single response. Add a "↻ Refresh Data" button in the header that re-fetches and re-triggers the skeleton → data cycle visibly.
+modules (id, order_index, title, badge_label, badge_color, concept_markdown, 
+         teaching_notes, chart_data JSONB, is_published)
 
-🧩 Module Specifications
-Module 1 — Global Macro & Opening Indicators
+questions (id, module_id, question_text, options JSONB, correct_index, 
+           explanation, difficulty ENUM('beginner','intermediate','advanced','expert'),
+           scenario_type VARCHAR, is_ai_generated, created_at)
 
-Layout: 4 equal cards in a row
-Each card: metric name, large price, change value + % badge (green/red pill — reuse existing badge style)
-GIFT Nifty card gets an extra "GAP-UP" / "GAP-DOWN" / "FLAT" badge based on sign of changePct
-Every card has a ⓘ icon top-right with glassmorphism tooltip:
+user_progress (id, user_id, module_id, status ENUM('locked','in_progress','passed','failed'),
+               attempts INT, best_score INT, last_attempt_at, passed_at)
 
-GIFT Nifty: "Predicts Nifty 50 opening. Premium = Gap-Up. Discount = Gap-Down vs last close."
-Brent Crude: "India imports 85% of its oil. Above $90/bbl is Bearish — hits inflation, Paint & Aviation margins."
-USD/INR: "Rupee weakening = capital flight (Bearish). But boosts IT & Pharma export earnings (Selective Positive)."
-US 10Y Yield: "The gravity of all markets. Rising yields pull FII money from India to safer US returns."
+user_answers (id, user_id, question_id, selected_index, is_correct, time_taken_ms, created_at)
 
+ai_sessions (id, user_id, module_id, prompt_sent, response_received, 
+             questions_generated JSONB, created_at)
 
+leaderboard (id, user_id, total_score, modules_passed, streak_days, last_updated)
 
-Module 2 — Institutional Flows (Big Money)
+📚 Course Content — 8 Modules (Seed Data Required)
+Seed all 8 modules with full content. Each module must have a minimum of 15 hand-written questions across 4 difficulty tiers (beginner/intermediate/advanced/expert) in the database at launch.
+Module 1 — Market Structure
+Concepts: Higher Highs/Lows, Lower Highs/Lows, Break of Structure (BOS), Change of Character (CHoCH), Internal vs External Structure, Swing High/Low identification rules, Multi-timeframe structure alignment (Daily → 1H → 15m → 5m).
+Chart Scenarios to seed:
 
-Layout: Full-width card with two side-by-side grouped bar charts (FII left, DII right) using Recharts BarChart
-Each group: Buy (green), Sell (red), Net (blue or amber based on sign)
-Y-axis in ₹ Crore
-Below charts: Net Flow Summary row — "FII Net: ▲/▼ ₹X Cr" + "DII Net: ▲/▼ ₹X Cr" + "Combined: ▲/▼ ₹X Cr" color coded
-Card ⓘ tooltip: "FIIs are 'Hot Money' driving rallies and crashes. DIIs (mutual funds) act as the market cushion. Combined net flow determines trend strength."
+Nifty Daily Jan 2024 rally (clean uptrend structure)
+BankNifty 15m Oct 2023 (structure break mid-session)
+Nifty 1H Feb 2024 (CHoCH before reversal)
 
-Module 3 — Market Breadth & Sentiment
+Advanced test scenarios: Identify CHoCH on 5m against 1H trend. Multi-timeframe conflict resolution. Distinguish genuine BOS from liquidity sweep that looks like BOS.
 
-Layout: Two cards side by side
+Module 2 — Liquidity Theory
+Concepts: Buyside/Sellside Liquidity, Equal Highs/Lows, Stop Hunt mechanics, Round number liquidity, Previous Day High/Low as liquidity pools, Liquidity voids, Inducement vs genuine liquidity.
+Advanced test scenarios: Identify inducement vs real liquidity pool. Triple equal highs — which one gets swept first? Opening gap liquidity scenarios. BankNifty pre-event liquidity stacks.
 
-Card A — Advance/Decline:
+Module 3 — Order Blocks
+Concepts: Bullish/Bearish OB identification, OB validation rules (BOS requirement), OB mitigation, Breaker Blocks (invalidated OB that flips), Propulsion Blocks, OB refinement on LTF, OB stacking, Volume at OB.
+Advanced test scenarios: Distinguish valid OB from random candle. Breaker block identification after OB is violated. Refined OB entry on 5m inside 1H OB. Multiple OBs — which one to prioritize.
 
-Horizontal stacked bar: green (advances) | gray (unchanged) | red (declines), counts labeled inside segments
-Below: A/D Ratio (e.g. 1.4:1) + sentiment label: STRONG BREADTH / MIXED / WEAK
-ⓘ tooltip: "Internal health check. If Nifty is up but A/D is negative, the rally is narrow and fragile — a warning sign."
+Module 4 — Fair Value Gaps & Imbalances
+Concepts: Bullish/Bearish FVG identification, Inverse FVG (IFVG), FVG fill probability rules, Partial vs full fills, FVG as support/resistance, Consequent Encroachment (50% of FVG), Balanced Price Range (BPR = overlapping bull+bear FVG), FVG + OB confluence (PD Array Stack).
+Advanced test scenarios: Identify BPR on BankNifty 5m. IFVG scenario — when does a filled FVG become resistance? FVG stacking — multiple unfilled FVGs in same direction.
 
-Card B — India VIX Gauge:
+Module 5 — Premium & Discount + Market Maker Model
+Concepts: Equilibrium (50% of range), Premium/Discount zones, Optimal Trade Entry (OTE) using Fibonacci 61.8–78.6%, 4-Phase Market Maker Model (Accumulation → Manipulation → Distribution/Expansion → Reversal), Opening Range Manipulation, Daily profile patterns.
+Advanced test scenarios: OTE zone calculation on live scenario. Identify which phase the market is in mid-session. Distinguish accumulation consolidation from distribution. Opening manipulation direction identification.
 
-SVG semi-circle needle gauge, hand-coded
+Module 6 — Multi-Timeframe Analysis (MTFA)
+Concepts: Top-down analysis framework (Weekly → Daily → 4H → 1H → 15m → 5m), HTF bias establishment, LTF entry triggers, Conflicting timeframe resolution, When to trade with vs against HTF, Timeframe alignment for high-probability entries.
+Advanced test scenarios: 5 charts at different timeframes — identify the correct entry TF. HTF bearish vs LTF bullish setup — what to do. Timeframe alignment scoring system.
 
-Zones: 0–15 green, 15–20 amber, 20–30 red
-Needle animates to VIX value on load (transition: transform 1s ease)
-Below: VIX value + label: CALM / CAUTION / FEAR / PANIC
+Module 7 — Trade Management & Risk
+Concepts: SL placement rules (beyond sweep wick), Partial profit taking, Breakeven strategy, Trailing SL mechanics (structural trail vs candle trail), Position sizing (1% risk rule), RR calculation, Scaling in/out, Managing trades through news events.
+Advanced test scenarios: Given entry/SL/target — calculate exact lot size for 1% risk. Trade management decision tree (what to do when T1 hit, price consolidates, then continues). SL placement for different setup types.
 
+Module 8 — Full System Integration + Chop Detection
+Concepts: The 8-point pre-trade checklist, Chop market identification, Range-bound vs trending day classification, High-probability vs low-probability setup scoring, Journal analysis patterns, Pre-market routine (GIFT Nifty, PDH/PDL, economic calendar), The psychology of skipping trades.
+Advanced test scenarios: Full day chart — find ALL valid setups (not just one). Chop day identification from first 30 minutes. Complete pre-trade checklist scoring on 3 different setups — one passes, two fail, identify which.
 
-ⓘ tooltip: "The Fear Index. <15: Calm. 15–20: Caution. >20: Fear. >25: Panic. High VIX = expensive options, expect sharp moves."
+🤖 AI Question Generation System
+Backend Endpoint: POST /api/ai/generate-questions
+When a user is about to take a test OR when the admin triggers generation, call the Anthropic Claude API with this system:
+You are an expert trading educator specializing in Smart Money Concepts for Indian equity markets (Nifty 50 and Bank Nifty). Generate advanced test questions that challenge traders beyond surface-level concept knowledge.
 
-Module 4 — Sector Rotation Heatmap
+Generate {count} questions for Module: {module_title}
+Difficulty: {difficulty}
+Scenario Type: {scenario_type} — one of: [chart_reading, calculation, decision_making, concept_application, error_identification, multi_step_reasoning]
 
-Layout: Full-width card
-Visual: Treemap via CSS Flexbox (no external lib) — block sizes proportional to weight
-Color scale (only new styling decision here):
+Requirements for each question:
+1. Base it on a REALISTIC Nifty or BankNifty scenario with specific price levels (e.g., "BankNifty is at 48,240, PDH was 48,650, there's a bearish OB at 48,580–48,620...")
+2. 4 options — only one correct, others plausible and commonly confused by traders
+3. The wrong options must represent actual mistakes retail traders make
+4. Explanation must be brutally honest and reference the exact concept
+5. For 'expert' difficulty: require multi-concept reasoning (e.g., OB + FVG + premium/discount + MTFA all in one scenario)
 
-> +1.5% → #16A34A
-0 to +1.5% → #4ADE80 at 60% opacity
--1.5% to 0 → #F87171 at 60% opacity
-< -1.5% → #DC2626
+Return ONLY valid JSON array:
+[{
+  "question_text": "...",
+  "options": ["A", "B", "C", "D"],
+  "correct_index": 0,
+  "explanation": "...",
+  "difficulty": "advanced",
+  "scenario_type": "chart_reading",
+  "is_ai_generated": true
+}]
+AI Generation Triggers:
 
-
-Each block: sector name + +X.XX% centered and bold
-Hover on block: mini popup with simulated Buy/Sell/Net breakdown
-Card ⓘ tooltip: "Sector Rotation reveals where Smart Money is moving today. Consistent green in Defense + Red in IT = risk-off rotation."
-
-
-⚙️ Technical Requirements
-
-Single .jsx file — critical layout styles inline, rest inherit from existing UI
-State: useState + useEffect only
-Charts: recharts only — no Chart.js
-Animations:
-
-Skeleton pulse on load
-VIX needle CSS transition (transform 1s ease)
-Card fade-in on mount (opacity 0→1, translateY 10px→0, staggered 100ms per module)
+On user test start — generate 3 fresh questions to supplement the 3 seeded questions (total 6-question test, need 4/6 to pass)
+Daily cron job — generate 5 new questions per module per difficulty level and store in DB
+Admin panel — manual generation with custom difficulty/scenario_type
 
 
-Header: Dashboard title left + IST timestamp (live, updates every second) right + Refresh button
-Footer: "Data simulated for educational purposes. Not investment advice."
-Error state: Red banner "⚠ Data fetch failed. Showing cached data." + hardcoded fallback values — UI must never be blank
+🧩 Frontend Pages & Components
+1. Landing Page (/)
+
+Hero: "Learn to Trade Like Smart Money" tagline
+Module roadmap visual showing all 8 modules with lock/unlock states
+Stats bar: X students enrolled, Y questions in bank, Z modules
+CTA: Start Free
+
+2. Auth Pages (/login, /register)
+
+Clean forms, JWT auth, store token in httpOnly cookie
+
+3. Dashboard (/dashboard)
+
+Progress overview: modules completed, current streak, total score
+Resume button → continues from last incomplete module
+Leaderboard sidebar (top 10 by score)
+Recent activity feed
+
+4. Module Page (/module/:id)
+Phase 1 — Learn:
+
+Concept explanation rendered from markdown
+Interactive candle chart (use lightweight-charts v4 — NOT v5) with annotations layer
+Annotations: labeled swing points (HH/HL/LH/LL), OB boxes, FVG zones, sweep markers, entry/SL/TP lines — all color coded
+Teaching notes panel below chart
+"I'm ready to be tested" CTA button
+
+Phase 2 — Test:
+
+6 questions (3 seeded + 3 AI-generated fresh)
+Timer per question: 90 seconds (mirrors real trading decision speed)
+After each answer: show correct/wrong + full explanation immediately
+Progress bar: Q1 of 6
+Pass threshold: 4/6 correct
+On pass: unlock animation + next module unlocked
+On fail: show which concepts were wrong, offer targeted review, retry after 10 minutes (anti-spam)
+
+Phase 3 — Practice Chart (Post-Pass)
+
+After passing, show the real TradingView date and symbol to practice on
+"Open in TradingView" deeplink button
+Checklist of things to mark on the chart yourself
+
+5. Progress Page (/progress)
+
+Module-by-module breakdown
+Question accuracy by concept type
+Weak areas identified (e.g., "You score 45% on CHoCH identification — review Module 1")
+Time spent learning
+
+6. Admin Panel (/admin) — Protected route
+
+Module CRUD with markdown editor
+Question bank management (view/edit/delete AI + manual questions)
+AI generation controls (trigger per module, per difficulty)
+User management + progress overview
 
 
-✅ Output Contract
+🎨 UI/UX Specifications
+Follow a professional dark trading terminal aesthetic — dark backgrounds, sharp data visualization, monospace numbers. Specific new styling decisions only for:
 
-All 4 modules fully rendered — no // TODO or stub comments
-Numbers formatted: prices 2 decimal places, ₹ Crore with commas, percentages with sign (+1.23%)
-Zero console errors on mount
-Refresh button visibly re-triggers skeleton → data cycle
+Candle charts: Green #22C55E bull candles, Red #EF4444 bear candles, annotation boxes with semi-transparent fills matching type (blue for OB, amber for FVG, red for sweep, green for entry)
+Module lock state: Frosted glass overlay with lock icon
+Pass/Fail animation: Pass = green radial pulse. Fail = red shake animation.
+Timer bar: Depleting progress bar, turns amber at 30s, red at 10s
+Question difficulty badges: Beginner (green), Intermediate (blue), Advanced (amber), Expert (red)
+Leaderboard: Rank 1 = gold, Rank 2 = silver, Rank 3 = bronze accent
+
+For all other components — cards, buttons, inputs, nav, typography, spacing — use your existing component library/design system without introducing new patterns.
