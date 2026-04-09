@@ -161,6 +161,40 @@ export interface MarketSentimentOverview {
     relativeStrength: number;
     performance: string;
   }>;
+  globalMacro: {
+    giftNifty: {
+      price: number;
+      change: number;
+      changePct: number;
+    };
+    brentCrude: {
+      price: number;
+      change: number;
+      changePct: number;
+    };
+    usdInr: {
+      price: number;
+      change: number;
+      changePct: number;
+    };
+    us10yYield: {
+      price: number;
+      change: number;
+      changePct: number;
+    };
+  };
+  institutionalFlows: {
+    fii: {
+      buy: number;
+      sell: number;
+      net: number;
+    };
+    dii: {
+      buy: number;
+      sell: number;
+      net: number;
+    };
+  };
   keyFactors: string[];
   summary: string;
 }
