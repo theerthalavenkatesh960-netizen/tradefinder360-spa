@@ -42,8 +42,10 @@ const TARGET_TYPES = [
 export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsProps) => {
   const [expanded, setExpanded] = useState(true);
   const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED' | 'SMC_FVG' | 'ORB_FVG_RETEST'>('ORB');
-  const [from, setFrom] = useState(format(subDays(new Date(), 90), 'yyyy-MM-dd'));
-  const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
+  // const [from, setFrom] = useState(format(subDays(new Date(), 90), 'yyyy-MM-dd'));
+  // const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [from, setFrom] = useState('2026-01-19');
+  const [to, setTo] = useState('2026-01-21');
   const [timeframe, setTimeframe] = useState(5);
   const [riskPercent, setRiskPercent] = useState(1);
   const [slType, setSlType] = useState<'FIXED_PERCENT' | 'ATR' | 'CANDLE'>('ATR');

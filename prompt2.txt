@@ -1,0 +1,121 @@
+Role: You are a Senior Full-Stack Developer and Financial Systems Architect specializing in real-time trading dashboards for Indian equity markets.
+Goal: Build a production-grade Indian Stock Market Analysis "Cockpit" Dashboard as a single-file React JSX artifact. A trader must be able to assess market health in under 30 seconds.
+
+🎨 Design System
+Follow the existing UI's styling conventions throughout — reuse its color palette, font choices, card styles, spacing, and component patterns. Do not introduce a new design language. Only make independent styling decisions for the following elements that have no existing equivalent:
+
+The VIX needle gauge (SVG semi-circle — hand-coded)
+The Sector Heatmap blocks (color scale: deep green → muted green → muted red → deep red based on % change)
+The A/D stacked bar (green | gray | red segments inline)
+The Glassmorphism tooltip on ⓘ icons (backdrop-filter: blur(12px), dark semi-transparent bg, white text, soft border, max-width 260px)
+
+For everything else — cards, headers, badges, charts, buttons, fonts, spacing — inherit directly from the existing UI.
+
+📦 Data Layer
+Use the Anthropic API (claude-sonnet-4-20250514) to simulate realistic, market-consistent data for all modules. On mount, make one structured API call with this system prompt:
+You are a financial data simulator for Indian markets. Return ONLY a valid JSON object (no markdown, no explanation) with this exact schema for a realistic market session:
+{
+  "timestamp": "ISO string",
+  "giftNifty": { "price": number, "change": number, "changePct": number },
+  "brentCrude": { "price": number, "change": number, "changePct": number },
+  "usdInr": { "price": number, "change": number, "changePct": number },
+  "us10yYield": { "price": number, "change": number, "changePct": number },
+  "fii": { "buy": number, "sell": number, "net": number },
+  "dii": { "buy": number, "sell": number, "net": number },
+  "advanceDecline": { "advances": number, "declines": number, "unchanged": number },
+  "indiaVix": { "value": number, "change": number },
+  "sectors": [
+    { "name": "Nifty Bank", "changePct": number, "weight": number },
+    { "name": "Nifty IT", "changePct": number, "weight": number },
+    { "name": "Nifty Pharma", "changePct": number, "weight": number },
+    { "name": "Nifty Auto", "changePct": number, "weight": number },
+    { "name": "Nifty Defense", "changePct": number, "weight": number },
+    { "name": "Nifty FMCG", "changePct": number, "weight": number }
+  ]
+}
+Show skeleton loaders (matching existing UI skeleton style if any, otherwise simple pulse animation) while the API call is in progress. Parse and render all four modules from this single response. Add a "↻ Refresh Data" button in the header that re-fetches and re-triggers the skeleton → data cycle visibly.
+
+🧩 Module Specifications
+Module 1 — Global Macro & Opening Indicators
+
+Layout: 4 equal cards in a row
+Each card: metric name, large price, change value + % badge (green/red pill — reuse existing badge style)
+GIFT Nifty card gets an extra "GAP-UP" / "GAP-DOWN" / "FLAT" badge based on sign of changePct
+Every card has a ⓘ icon top-right with glassmorphism tooltip:
+
+GIFT Nifty: "Predicts Nifty 50 opening. Premium = Gap-Up. Discount = Gap-Down vs last close."
+Brent Crude: "India imports 85% of its oil. Above $90/bbl is Bearish — hits inflation, Paint & Aviation margins."
+USD/INR: "Rupee weakening = capital flight (Bearish). But boosts IT & Pharma export earnings (Selective Positive)."
+US 10Y Yield: "The gravity of all markets. Rising yields pull FII money from India to safer US returns."
+
+
+
+Module 2 — Institutional Flows (Big Money)
+
+Layout: Full-width card with two side-by-side grouped bar charts (FII left, DII right) using Recharts BarChart
+Each group: Buy (green), Sell (red), Net (blue or amber based on sign)
+Y-axis in ₹ Crore
+Below charts: Net Flow Summary row — "FII Net: ▲/▼ ₹X Cr" + "DII Net: ▲/▼ ₹X Cr" + "Combined: ▲/▼ ₹X Cr" color coded
+Card ⓘ tooltip: "FIIs are 'Hot Money' driving rallies and crashes. DIIs (mutual funds) act as the market cushion. Combined net flow determines trend strength."
+
+Module 3 — Market Breadth & Sentiment
+
+Layout: Two cards side by side
+
+Card A — Advance/Decline:
+
+Horizontal stacked bar: green (advances) | gray (unchanged) | red (declines), counts labeled inside segments
+Below: A/D Ratio (e.g. 1.4:1) + sentiment label: STRONG BREADTH / MIXED / WEAK
+ⓘ tooltip: "Internal health check. If Nifty is up but A/D is negative, the rally is narrow and fragile — a warning sign."
+
+Card B — India VIX Gauge:
+
+SVG semi-circle needle gauge, hand-coded
+
+Zones: 0–15 green, 15–20 amber, 20–30 red
+Needle animates to VIX value on load (transition: transform 1s ease)
+Below: VIX value + label: CALM / CAUTION / FEAR / PANIC
+
+
+ⓘ tooltip: "The Fear Index. <15: Calm. 15–20: Caution. >20: Fear. >25: Panic. High VIX = expensive options, expect sharp moves."
+
+Module 4 — Sector Rotation Heatmap
+
+Layout: Full-width card
+Visual: Treemap via CSS Flexbox (no external lib) — block sizes proportional to weight
+Color scale (only new styling decision here):
+
+> +1.5% → #16A34A
+0 to +1.5% → #4ADE80 at 60% opacity
+-1.5% to 0 → #F87171 at 60% opacity
+< -1.5% → #DC2626
+
+
+Each block: sector name + +X.XX% centered and bold
+Hover on block: mini popup with simulated Buy/Sell/Net breakdown
+Card ⓘ tooltip: "Sector Rotation reveals where Smart Money is moving today. Consistent green in Defense + Red in IT = risk-off rotation."
+
+
+⚙️ Technical Requirements
+
+Single .jsx file — critical layout styles inline, rest inherit from existing UI
+State: useState + useEffect only
+Charts: recharts only — no Chart.js
+Animations:
+
+Skeleton pulse on load
+VIX needle CSS transition (transform 1s ease)
+Card fade-in on mount (opacity 0→1, translateY 10px→0, staggered 100ms per module)
+
+
+Header: Dashboard title left + IST timestamp (live, updates every second) right + Refresh button
+Footer: "Data simulated for educational purposes. Not investment advice."
+Error state: Red banner "⚠ Data fetch failed. Showing cached data." + hardcoded fallback values — UI must never be blank
+
+
+✅ Output Contract
+
+All 4 modules fully rendered — no // TODO or stub comments
+Numbers formatted: prices 2 decimal places, ₹ Crore with commas, percentages with sign (+1.23%)
+Zero console errors on mount
+Refresh button visibly re-triggers skeleton → data cycle
