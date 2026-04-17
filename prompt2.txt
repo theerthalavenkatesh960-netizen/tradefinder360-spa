@@ -1,0 +1,171 @@
+Here's your complete Copilot prompt:
+
+Role: You are a Senior Full-Stack Developer building a production-grade Trading Education Platform for Indian retail traders. The platform teaches Smart Money Concepts (SMC) and Price Action exclusively for Nifty 50 and Bank Nifty.
+Tech Stack: React + TypeScript frontend, Node.js/Express backend, PostgreSQL database, Tailwind CSS. Deploy-ready structure with proper folder organization.
+
+🎯 Product Vision
+Build a course platform called "SMC Mastery — Nifty & BankNifty" where users progress through structured modules, get tested on real chart scenarios, and unlock the next module only after passing. The platform uses the Anthropic Claude API to dynamically generate advanced test questions, chart scenarios, and detailed explanations — so the question bank is effectively infinite and always unique.
+
+🗄️ Database Schema (PostgreSQL)
+sqlusers (id, email, name, password_hash, created_at, last_login)
+
+modules (id, order_index, title, badge_label, badge_color, concept_markdown, 
+         teaching_notes, chart_data JSONB, is_published)
+
+questions (id, module_id, question_text, options JSONB, correct_index, 
+           explanation, difficulty ENUM('beginner','intermediate','advanced','expert'),
+           scenario_type VARCHAR, is_ai_generated, created_at)
+
+user_progress (id, user_id, module_id, status ENUM('locked','in_progress','passed','failed'),
+               attempts INT, best_score INT, last_attempt_at, passed_at)
+
+user_answers (id, user_id, question_id, selected_index, is_correct, time_taken_ms, created_at)
+
+ai_sessions (id, user_id, module_id, prompt_sent, response_received, 
+             questions_generated JSONB, created_at)
+
+leaderboard (id, user_id, total_score, modules_passed, streak_days, last_updated)
+
+📚 Course Content — 8 Modules (Seed Data Required)
+Seed all 8 modules with full content. Each module must have a minimum of 15 hand-written questions across 4 difficulty tiers (beginner/intermediate/advanced/expert) in the database at launch.
+Module 1 — Market Structure
+Concepts: Higher Highs/Lows, Lower Highs/Lows, Break of Structure (BOS), Change of Character (CHoCH), Internal vs External Structure, Swing High/Low identification rules, Multi-timeframe structure alignment (Daily → 1H → 15m → 5m).
+Chart Scenarios to seed:
+
+Nifty Daily Jan 2024 rally (clean uptrend structure)
+BankNifty 15m Oct 2023 (structure break mid-session)
+Nifty 1H Feb 2024 (CHoCH before reversal)
+
+Advanced test scenarios: Identify CHoCH on 5m against 1H trend. Multi-timeframe conflict resolution. Distinguish genuine BOS from liquidity sweep that looks like BOS.
+
+Module 2 — Liquidity Theory
+Concepts: Buyside/Sellside Liquidity, Equal Highs/Lows, Stop Hunt mechanics, Round number liquidity, Previous Day High/Low as liquidity pools, Liquidity voids, Inducement vs genuine liquidity.
+Advanced test scenarios: Identify inducement vs real liquidity pool. Triple equal highs — which one gets swept first? Opening gap liquidity scenarios. BankNifty pre-event liquidity stacks.
+
+Module 3 — Order Blocks
+Concepts: Bullish/Bearish OB identification, OB validation rules (BOS requirement), OB mitigation, Breaker Blocks (invalidated OB that flips), Propulsion Blocks, OB refinement on LTF, OB stacking, Volume at OB.
+Advanced test scenarios: Distinguish valid OB from random candle. Breaker block identification after OB is violated. Refined OB entry on 5m inside 1H OB. Multiple OBs — which one to prioritize.
+
+Module 4 — Fair Value Gaps & Imbalances
+Concepts: Bullish/Bearish FVG identification, Inverse FVG (IFVG), FVG fill probability rules, Partial vs full fills, FVG as support/resistance, Consequent Encroachment (50% of FVG), Balanced Price Range (BPR = overlapping bull+bear FVG), FVG + OB confluence (PD Array Stack).
+Advanced test scenarios: Identify BPR on BankNifty 5m. IFVG scenario — when does a filled FVG become resistance? FVG stacking — multiple unfilled FVGs in same direction.
+
+Module 5 — Premium & Discount + Market Maker Model
+Concepts: Equilibrium (50% of range), Premium/Discount zones, Optimal Trade Entry (OTE) using Fibonacci 61.8–78.6%, 4-Phase Market Maker Model (Accumulation → Manipulation → Distribution/Expansion → Reversal), Opening Range Manipulation, Daily profile patterns.
+Advanced test scenarios: OTE zone calculation on live scenario. Identify which phase the market is in mid-session. Distinguish accumulation consolidation from distribution. Opening manipulation direction identification.
+
+Module 6 — Multi-Timeframe Analysis (MTFA)
+Concepts: Top-down analysis framework (Weekly → Daily → 4H → 1H → 15m → 5m), HTF bias establishment, LTF entry triggers, Conflicting timeframe resolution, When to trade with vs against HTF, Timeframe alignment for high-probability entries.
+Advanced test scenarios: 5 charts at different timeframes — identify the correct entry TF. HTF bearish vs LTF bullish setup — what to do. Timeframe alignment scoring system.
+
+Module 7 — Trade Management & Risk
+Concepts: SL placement rules (beyond sweep wick), Partial profit taking, Breakeven strategy, Trailing SL mechanics (structural trail vs candle trail), Position sizing (1% risk rule), RR calculation, Scaling in/out, Managing trades through news events.
+Advanced test scenarios: Given entry/SL/target — calculate exact lot size for 1% risk. Trade management decision tree (what to do when T1 hit, price consolidates, then continues). SL placement for different setup types.
+
+Module 8 — Full System Integration + Chop Detection
+Concepts: The 8-point pre-trade checklist, Chop market identification, Range-bound vs trending day classification, High-probability vs low-probability setup scoring, Journal analysis patterns, Pre-market routine (GIFT Nifty, PDH/PDL, economic calendar), The psychology of skipping trades.
+Advanced test scenarios: Full day chart — find ALL valid setups (not just one). Chop day identification from first 30 minutes. Complete pre-trade checklist scoring on 3 different setups — one passes, two fail, identify which.
+
+🤖 AI Question Generation System
+Backend Endpoint: POST /api/ai/generate-questions
+When a user is about to take a test OR when the admin triggers generation, call the Anthropic Claude API with this system:
+You are an expert trading educator specializing in Smart Money Concepts for Indian equity markets (Nifty 50 and Bank Nifty). Generate advanced test questions that challenge traders beyond surface-level concept knowledge.
+
+Generate {count} questions for Module: {module_title}
+Difficulty: {difficulty}
+Scenario Type: {scenario_type} — one of: [chart_reading, calculation, decision_making, concept_application, error_identification, multi_step_reasoning]
+
+Requirements for each question:
+1. Base it on a REALISTIC Nifty or BankNifty scenario with specific price levels (e.g., "BankNifty is at 48,240, PDH was 48,650, there's a bearish OB at 48,580–48,620...")
+2. 4 options — only one correct, others plausible and commonly confused by traders
+3. The wrong options must represent actual mistakes retail traders make
+4. Explanation must be brutally honest and reference the exact concept
+5. For 'expert' difficulty: require multi-concept reasoning (e.g., OB + FVG + premium/discount + MTFA all in one scenario)
+
+Return ONLY valid JSON array:
+[{
+  "question_text": "...",
+  "options": ["A", "B", "C", "D"],
+  "correct_index": 0,
+  "explanation": "...",
+  "difficulty": "advanced",
+  "scenario_type": "chart_reading",
+  "is_ai_generated": true
+}]
+AI Generation Triggers:
+
+On user test start — generate 3 fresh questions to supplement the 3 seeded questions (total 6-question test, need 4/6 to pass)
+Daily cron job — generate 5 new questions per module per difficulty level and store in DB
+Admin panel — manual generation with custom difficulty/scenario_type
+
+
+🧩 Frontend Pages & Components
+1. Landing Page (/)
+
+Hero: "Learn to Trade Like Smart Money" tagline
+Module roadmap visual showing all 8 modules with lock/unlock states
+Stats bar: X students enrolled, Y questions in bank, Z modules
+CTA: Start Free
+
+2. Auth Pages (/login, /register)
+
+Clean forms, JWT auth, store token in httpOnly cookie
+
+3. Dashboard (/dashboard)
+
+Progress overview: modules completed, current streak, total score
+Resume button → continues from last incomplete module
+Leaderboard sidebar (top 10 by score)
+Recent activity feed
+
+4. Module Page (/module/:id)
+Phase 1 — Learn:
+
+Concept explanation rendered from markdown
+Interactive candle chart (use lightweight-charts v4 — NOT v5) with annotations layer
+Annotations: labeled swing points (HH/HL/LH/LL), OB boxes, FVG zones, sweep markers, entry/SL/TP lines — all color coded
+Teaching notes panel below chart
+"I'm ready to be tested" CTA button
+
+Phase 2 — Test:
+
+6 questions (3 seeded + 3 AI-generated fresh)
+Timer per question: 90 seconds (mirrors real trading decision speed)
+After each answer: show correct/wrong + full explanation immediately
+Progress bar: Q1 of 6
+Pass threshold: 4/6 correct
+On pass: unlock animation + next module unlocked
+On fail: show which concepts were wrong, offer targeted review, retry after 10 minutes (anti-spam)
+
+Phase 3 — Practice Chart (Post-Pass)
+
+After passing, show the real TradingView date and symbol to practice on
+"Open in TradingView" deeplink button
+Checklist of things to mark on the chart yourself
+
+5. Progress Page (/progress)
+
+Module-by-module breakdown
+Question accuracy by concept type
+Weak areas identified (e.g., "You score 45% on CHoCH identification — review Module 1")
+Time spent learning
+
+6. Admin Panel (/admin) — Protected route
+
+Module CRUD with markdown editor
+Question bank management (view/edit/delete AI + manual questions)
+AI generation controls (trigger per module, per difficulty)
+User management + progress overview
+
+
+🎨 UI/UX Specifications
+Follow a professional dark trading terminal aesthetic — dark backgrounds, sharp data visualization, monospace numbers. Specific new styling decisions only for:
+
+Candle charts: Green #22C55E bull candles, Red #EF4444 bear candles, annotation boxes with semi-transparent fills matching type (blue for OB, amber for FVG, red for sweep, green for entry)
+Module lock state: Frosted glass overlay with lock icon
+Pass/Fail animation: Pass = green radial pulse. Fail = red shake animation.
+Timer bar: Depleting progress bar, turns amber at 30s, red at 10s
+Question difficulty badges: Beginner (green), Intermediate (blue), Advanced (amber), Expert (red)
+Leaderboard: Rank 1 = gold, Rank 2 = silver, Rank 3 = bronze accent
+
+For all other components — cards, buttons, inputs, nav, typography, spacing — use your existing component library/design system without introducing new patterns.

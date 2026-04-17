@@ -7,6 +7,7 @@ const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login }
 const Register = lazy(() => import('./pages/Register').then(m => ({ default: m.Register })));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(m => ({ default: m.ForgotPassword })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const MarketInsightsToday = lazy(() => import('./pages/MarketInsightsToday').then(m => ({ default: m.MarketInsightsToday })));
 const StockExplorer = lazy(() => import('./pages/StockExplorer').then(m => ({ default: m.StockExplorer })));
 const StockDetail = lazy(() => import('./pages/StockDetail').then(m => ({ default: m.StockDetail })));
 const PortfolioBuilder = lazy(() => import('./pages/PortfolioBuilder').then(m => ({ default: m.PortfolioBuilder })));
@@ -51,7 +52,8 @@ function App() {
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
 
-            <Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
+            <Route path="/" element={<ProtectedRoute><Layout><MarketInsightsToday /></Layout></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
             <Route path="/stocks" element={<ProtectedRoute><Layout><StockExplorer /></Layout></ProtectedRoute>} />
             <Route path="/stocks/:symbol" element={<ProtectedRoute><Layout><StockDetail /></Layout></ProtectedRoute>} />
             <Route path="/portfolio" element={<ProtectedRoute><Layout><PortfolioBuilder /></Layout></ProtectedRoute>} />

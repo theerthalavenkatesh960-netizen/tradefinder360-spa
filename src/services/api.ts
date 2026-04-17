@@ -127,6 +127,136 @@ export interface MarketSentiment {
   }>;
 }
 
+export interface MarketSentimentOverview {
+  timestamp: string;
+  sentiment: 'STRONGLY_BULLISH' | 'BULLISH' | 'NEUTRAL' | 'BEARISH' | 'STRONGLY_BEARISH';
+  sentimentScore: number;
+  sentimentDescription: string;
+  volatility: {
+    index: number;
+    level: 'LOW' | 'MODERATE' | 'HIGH' | 'EXTREME';
+    impact: string;
+  };
+  breadth: {
+    advanceDeclineRatio: number;
+    stocksAdvancing: number;
+    stocksDeclining: number;
+    stocksUnchanged: number;
+    interpretation: string;
+  };
+  majorIndices: Array<{
+    name: string;
+    symbol: string;
+    currentValue: number;
+    changePercent: number;
+    dayHigh: number;
+    dayLow: number;
+    trend: string;
+  }>;
+  sectors: Array<{
+    name: string;
+    changePercent: number;
+    stocksAdvancing: number;
+    stocksDeclining: number;
+    relativeStrength: number;
+    performance: string;
+  }>;
+  globalMacro: {
+    giftNifty: {
+      price: number;
+      change: number;
+      changePct: number;
+    };
+    brentCrude: {
+      price: number;
+      change: number;
+      changePct: number;
+    };
+    usdInr: {
+      price: number;
+      change: number;
+      changePct: number;
+    };
+    us10yYield: {
+      price: number;
+      change: number;
+      changePct: number;
+    };
+  };
+  institutionalFlows: {
+    fii: {
+      buy: number;
+      sell: number;
+      net: number;
+    };
+    dii: {
+      buy: number;
+      sell: number;
+      net: number;
+    };
+  };
+  keyFactors: string[];
+  summary: string;
+}
+
+export interface InstrumentSearchRequest {
+  search?: string;
+  exchange?: string;
+  sector?: string;
+  industry?: string;
+  instrumentType?: string;
+  derivativesEnabled?: boolean;
+  trend?: string;
+  minSetupScore?: number;
+  minAdx?: number;
+  rsiBelow?: number;
+  rsiAbove?: number;
+  minMarketCap?: number;
+  maxMarketCap?: number;
+  minChangePercent?: number;
+  maxChangePercent?: number;
+  hasRecommendation?: boolean;
+  priceTimeframe?: string;
+  scanTimeframe?: number;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface InstrumentSearchItem {
+  id: number;
+  name: string;
+  symbol: string;
+  exchange: string;
+  instrumentKey: string;
+  sector?: string;
+  industry?: string;
+  marketCap?: number;
+  instrumentType?: string;
+  isDerivativesEnabled: boolean;
+  price?: number;
+  volume?: number;
+  change?: number;
+  changePercent?: number;
+  trend?: string;
+  entryPrice?: number;
+  exitPrice?: number;
+  stopLoss?: number;
+  expectedProfit?: number;
+  confidence?: number;
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
 export interface PortfolioPosition {
   symbol: string;
   allocationPercent: number;
@@ -178,6 +308,75 @@ export interface BacktestMetrics {
 export interface BacktestResult {
   trades: BacktestTrade[];
   metrics: BacktestMetrics;
+  annotations?: BacktestAnnotations;
+}
+
+export interface BacktestAnnotations {
+  // One OrbZone per trading day
+  orbZones?: OrbZone[];
+  fvgZones?: FvgZone[];
+  obZones?: OrderBlockZone[];
+  retraceEvent?: ReplayEvent;
+  engulfingEvent?: ReplayEvent;
+  orbs?: OrbAnnotation[];
+  fvgs?: FvgAnnotation[];
+  orderBlocks?: OrderBlockAnnotation[];
+  events?: SignalEventAnnotation[];
+}
+
+export interface OrbZone {
+  orbStartIdx: number;
+  orbEndIdx: number;
+  orbHigh: number;
+  orbLow: number;
+  /** Non-null when no trade was entered that day — reason why */
+  tradeNotTakenReason?: string | null;
+}
+
+export interface FvgZone {
+  fvgStartIdx: number;
+  fvgEndIdx: number;
+  fvgHigh: number;
+  fvgLow: number;
+  direction?: string | null;  // 'BULLISH' | 'BEARISH'
+}
+
+export interface OrderBlockZone {
+  obStartIdx: number;
+  obEndIdx: number;
+  obHigh: number;
+  obLow: number;
+}
+
+export interface ReplayEvent {
+  candleIdx: number;
+  price: number;
+}
+
+export interface OrbAnnotation {
+  timestamp: string;
+  high: number;
+  low: number;
+}
+
+export interface FvgAnnotation {
+  formedAt: string;
+  gapLow: number;
+  gapHigh: number;
+  direction: string;
+}
+
+export interface OrderBlockAnnotation {
+  timestamp: string;
+  high: number;
+  low: number;
+  direction: string;
+}
+
+export interface SignalEventAnnotation {
+  timestamp: string;
+  eventType: string;
+  description: string;
 }
 
 export interface BacktestRequest {
@@ -186,7 +385,7 @@ export interface BacktestRequest {
   to: string;
   initialCapital?: number;
   strategy: {
-    name: 'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED';
+    name: 'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED' | 'SMC_FVG' | 'ORB_FVG_RETEST';
     params: {
       timeframe: number;
       riskPercent: number;
@@ -198,6 +397,7 @@ export interface BacktestRequest {
       slowEMA?: number;
       rsiOverbought?: number;
       rsiOversold?: number;
+      includeOrderBlocks?: boolean;
     };
   };
 }
@@ -291,6 +491,18 @@ export const api = {
       if (!response.ok) throw new Error('Failed to fetch indicators');
       return response.json();
     },
+
+    search: async (
+      request: InstrumentSearchRequest
+    ): Promise<PaginatedResult<InstrumentSearchItem>> => {
+      const response = await fetch(`${API_BASE_URL}/instrument/search`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(request),
+      });
+      if (!response.ok) throw new Error('Failed to search instruments');
+      return response.json();
+    },
   },
 
   candles: {
@@ -332,6 +544,14 @@ export const api = {
         headers: getHeaders(),
       });
       if (!response.ok) throw new Error('Failed to fetch market sentiment');
+      return response.json();
+    },
+
+    getSentimentOverview: async (): Promise<MarketSentimentOverview> => {
+      const response = await fetch(`${API_BASE_URL}/market/sentiment`, {
+        headers: getHeaders(),
+      });
+      if (!response.ok) throw new Error('Failed to fetch market sentiment overview');
       return response.json();
     },
   },
