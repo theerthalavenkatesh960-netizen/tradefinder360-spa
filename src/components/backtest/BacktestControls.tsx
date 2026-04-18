@@ -127,6 +127,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
           targetRRR: strategy === 'EMA' ? targetRRR : undefined,
           maxHoldingPeriods: strategy === 'EMA' ? maxHoldingPeriods : undefined,
           tradeDirection: strategy === 'EMA' ? tradeDirection : undefined,
+          emaTimeframeMode: strategy === 'EMA' ? emaTimeframeMode : undefined,
           emaMode: strategy === 'EMA' ? emaMode : undefined,
           orbMode: strategy === 'ORB' ? orbMode : undefined,
           smcMode: strategy === 'SMC' ? smcMode : undefined,

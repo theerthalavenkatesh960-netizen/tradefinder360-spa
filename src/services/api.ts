@@ -309,6 +309,19 @@ export interface BacktestResult {
   trades: BacktestTrade[];
   metrics: BacktestMetrics;
   annotations?: BacktestAnnotations;
+  comparison?: BacktestComparison;
+}
+
+export interface BacktestComparisonProfile {
+  mode: 'INTRADAY' | 'SWING';
+  trades: BacktestTrade[];
+  metrics: BacktestMetrics;
+  annotations?: BacktestAnnotations;
+}
+
+export interface BacktestComparison {
+  intraday: BacktestComparisonProfile;
+  swing: BacktestComparisonProfile;
 }
 
 export interface BacktestAnnotations {
@@ -415,6 +428,7 @@ export interface BacktestRequest {
       targetRRR?: number;
       maxHoldingPeriods?: number;
       tradeDirection?: 'LONG_ONLY' | 'SHORT_ONLY' | 'BOTH';
+      emaTimeframeMode?: 'INTRADAY' | 'SWING' | 'BOTH';
       emaMode?: 'CROSSOVER' | 'PULLBACK' | 'SPEED' | 'PULLBACK_SPEED';
       orbMode?: 'CLASSIC' | 'FVG_RETEST';
       smcMode?: 'FVG_OB';

@@ -260,6 +260,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const [backtestRequest, setBacktestRequest] = useState<BacktestRequest | null>(null);
   const [selectedStrategy, setSelectedStrategy] = useState<string>('ORB');
+  const [selectedComparisonProfile, setSelectedComparisonProfile] = useState<'INTRADAY' | 'SWING'>('INTRADAY');
   const [isReplayMode, setIsReplayMode] = useState(false);
   const [isReplayPlaying, setIsReplayPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState<ReplaySpeed>(1);
@@ -392,6 +393,27 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     retry: false,
   });
 
+  const activeBacktestResult = useMemo(() => {
+    if (!backtestResult) return null;
+    if (!backtestResult.comparison) return backtestResult;
+
+    const profile = selectedComparisonProfile === 'SWING'
+      ? backtestResult.comparison.swing
+      : backtestResult.comparison.intraday;
+
+    return {
+      trades: profile.trades,
+      metrics: profile.metrics,
+      annotations: profile.annotations,
+      comparison: backtestResult.comparison,
+    };
+  }, [backtestResult, selectedComparisonProfile]);
+
+  const activeProfileLabel = useMemo(() => {
+    if (!backtestResult?.comparison) return null;
+    return selectedComparisonProfile === 'SWING' ? 'Swing Profile' : 'Intraday Profile';
+  }, [backtestResult?.comparison, selectedComparisonProfile]);
+
   const timeframes = [
     { label: '1M', value: 1 },
     { label: '15M', value: 15 },
@@ -416,6 +438,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     setEntryPauseEvent(null);
     replayEntrySeenRef.current.clear();
     replayExitSeenRef.current.clear();
+
+    setSelectedComparisonProfile('INTRADAY');
     
     setSelectedStrategy(req.strategy.name);
     setBacktestRequest(req);
@@ -425,12 +449,12 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   const replayTotalCandles = replaySourceCandles.length;
 
   const replayNowMs = useMemo(() => {
-    if (!isReplayMode || !backtestResult || replayTotalCandles === 0) return null;
+    if (!isReplayMode || !activeBacktestResult || replayTotalCandles === 0) return null;
     const safeIndex = Math.min(Math.max(replayIndex, 0), replayTotalCandles - 1);
     return new Date(replaySourceCandles[safeIndex].timestamp).getTime();
-  }, [isReplayMode, backtestResult, replayIndex, replaySourceCandles, replayTotalCandles]);
+  }, [isReplayMode, activeBacktestResult, replayIndex, replaySourceCandles, replayTotalCandles]);
 
-  const allBacktestTrades = backtestResult?.trades ?? [];
+  const allBacktestTrades = activeBacktestResult?.trades ?? [];
   const showReplayWhenNoTrades = selectedStrategy === 'ORB_FVG_RETEST';
   const canShowReplaySection = allBacktestTrades.length > 0 || showReplayWhenNoTrades;
 
@@ -455,12 +479,12 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   }, [allBacktestTrades, entryPauseEvent]);
 
   const visibleEquityCurve = useMemo(() => {
-    const fullCurve = backtestResult?.metrics.equityCurve ?? [];
+    const fullCurve = activeBacktestResult?.metrics.equityCurve ?? [];
     if (!isReplayMode || replayNowMs === null || !fullCurve.length) return fullCurve;
 
     const filtered = fullCurve.filter((point: EquityPoint) => new Date(point.timestamp).getTime() <= replayNowMs);
     return filtered.length ? filtered : [fullCurve[0]];
-  }, [backtestResult?.metrics.equityCurve, isReplayMode, replayNowMs]);
+  }, [activeBacktestResult?.metrics.equityCurve, isReplayMode, replayNowMs]);
 
   const resetReplay = () => {
     setIsReplayPlaying(false);
@@ -475,7 +499,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   };
 
   useEffect(() => {
-    if (!backtestResult || replayTotalCandles === 0) return;
+    if (!activeBacktestResult || replayTotalCandles === 0) return;
     setIsReplayMode(false);
     setIsReplayPlaying(false);
     setIsReplayFollowOn(true);
@@ -486,7 +510,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
     setEntryPauseEvent(null);
     replayEntrySeenRef.current.clear();
     replayExitSeenRef.current.clear();
-  }, [backtestResult, replayTotalCandles, replayStartIndex]);
+  }, [activeBacktestResult, replayTotalCandles, replayStartIndex]);
 
   useEffect(() => {
     if (!isReplayMode || !isReplayPlaying || replayTotalCandles <= 1) return;
@@ -547,12 +571,12 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
   }, [isReplayPlaying]);
 
   useEffect(() => {
-    if (!isReplayMode || replayNowMs === null || !backtestResult) return;
+    if (!isReplayMode || replayNowMs === null || !activeBacktestResult) return;
 
     const nextEvents: ReplayEvent[] = [];
     const nextEntryEvents: ReplayEvent[] = [];
 
-    for (const trade of backtestResult.trades) {
+    for (const trade of activeBacktestResult.trades) {
       const entryMs = new Date(trade.entryTime).getTime();
       const exitMs = new Date(trade.exitTime).getTime();
 
@@ -616,7 +640,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
       window.clearTimeout(replayEventClearRef.current);
     }
     replayEventClearRef.current = window.setTimeout(() => setActiveReplayEvent(null), 1800);
-  }, [isReplayMode, replayNowMs, backtestResult, pauseOnTradeEntry, isReplayPlaying]);
+  }, [isReplayMode, replayNowMs, activeBacktestResult, pauseOnTradeEntry, isReplayPlaying]);
 
   useEffect(() => {
     if (!selectedTradeId || !isReplayMode) return;
@@ -1255,10 +1279,62 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
             {backtestResult && !backtestLoading && (
               <>
-                <BacktestMetricsBar metrics={backtestResult.metrics} />
+                {backtestResult.comparison && (
+                  <div className="mb-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedComparisonProfile('INTRADAY')}
+                      className={`text-left bg-[#12121a]/50 border rounded-xl p-4 transition ${selectedComparisonProfile === 'INTRADAY' ? 'border-indigo-500/60 ring-1 ring-indigo-500/30' : 'border-gray-800/50 hover:border-indigo-500/30'}`}
+                    >
+                      <p className="text-xs uppercase tracking-wide text-indigo-300 mb-2">Intraday (15:10 Cutoff)</p>
+                      <div className="grid grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <p className="text-gray-500 text-xs">Trades</p>
+                          <p className="text-white font-semibold">{backtestResult.comparison.intraday.metrics.totalTrades}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Win Rate</p>
+                          <p className="text-white font-semibold">{backtestResult.comparison.intraday.metrics.winRate.toFixed(2)}%</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">PnL</p>
+                          <p className={`font-semibold ${backtestResult.comparison.intraday.metrics.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            ₹{backtestResult.comparison.intraday.metrics.totalPnl.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedComparisonProfile('SWING')}
+                      className={`text-left bg-[#12121a]/50 border rounded-xl p-4 transition ${selectedComparisonProfile === 'SWING' ? 'border-amber-500/60 ring-1 ring-amber-500/30' : 'border-gray-800/50 hover:border-amber-500/30'}`}
+                    >
+                      <p className="text-xs uppercase tracking-wide text-amber-300 mb-2">Swing (Overnight Allowed)</p>
+                      <div className="grid grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <p className="text-gray-500 text-xs">Trades</p>
+                          <p className="text-white font-semibold">{backtestResult.comparison.swing.metrics.totalTrades}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Win Rate</p>
+                          <p className="text-white font-semibold">{backtestResult.comparison.swing.metrics.winRate.toFixed(2)}%</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">PnL</p>
+                          <p className={`font-semibold ${backtestResult.comparison.swing.metrics.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            ₹{backtestResult.comparison.swing.metrics.totalPnl.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+
+                <BacktestMetricsBar metrics={activeBacktestResult!.metrics} />
 
                 <div className="space-y-3">
-                  {backtestResult.trades.length === 0 && (
+                  {activeBacktestResult!.trades.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-6 bg-[#12121a]/40 border border-gray-800/40 rounded-xl text-center">
                       <p className="text-gray-300 font-medium mb-1">No trades generated</p>
                       <p className="text-gray-500 text-sm">
@@ -1306,6 +1382,15 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           >
                             Static Mode
                           </button>
+                          {activeProfileLabel && (
+                            <span className={`ml-1 px-2.5 py-1 rounded-md text-xs font-medium border ${
+                              selectedComparisonProfile === 'SWING'
+                                ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                                : 'border-indigo-500/40 bg-indigo-500/10 text-indigo-200'
+                            }`}>
+                              Viewing: {activeProfileLabel}
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
@@ -1434,7 +1519,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                           <BacktestChart
                             candles={candles}
                             indicators={indicators}
-                            trades={isReplayMode ? visibleTrades : backtestResult.trades}
+                            trades={isReplayMode ? visibleTrades : activeBacktestResult!.trades}
                             selectedTradeId={selectedTradeId}
                             hoveredTradeId={hoveredTradeId}
                             onTradeSelect={setSelectedTrade}
@@ -1449,7 +1534,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                               setEntryPauseEvent(null);
                             }}
                             strategy={selectedStrategy}
-                            annotations={backtestResult?.annotations}
+                            annotations={activeBacktestResult?.annotations}
                           />
 
                           <AnimatePresence>
@@ -1564,7 +1649,7 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
                           <div className="flex-1 min-h-0">
                             <TradeListPanel
-                              trades={isReplayMode ? visibleTrades : backtestResult.trades}
+                              trades={isReplayMode ? visibleTrades : activeBacktestResult!.trades}
                               selectedTradeId={selectedTradeId}
                               hoveredTradeId={hoveredTradeId}
                               onSelectTrade={setSelectedTrade}
@@ -1578,8 +1663,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
 
                 </div>
 
-                {(isReplayMode ? visibleEquityCurve : backtestResult.metrics.equityCurve)?.length > 0 && (
-                  <EquityCurve equityCurve={isReplayMode ? visibleEquityCurve : backtestResult.metrics.equityCurve} />
+                {(isReplayMode ? visibleEquityCurve : activeBacktestResult!.metrics.equityCurve)?.length > 0 && (
+                  <EquityCurve equityCurve={isReplayMode ? visibleEquityCurve : activeBacktestResult!.metrics.equityCurve} />
                 )}
               </>
             )}
