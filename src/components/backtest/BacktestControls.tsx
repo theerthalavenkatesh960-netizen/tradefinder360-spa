@@ -171,7 +171,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
             transition={{ duration: 0.2 }}
           >
             <div className="px-5 pb-5 border-t border-gray-800/50 pt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
                 {/* Strategy */}
                 <div className="lg:col-span-1">
@@ -192,11 +192,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                   <p className="text-xs text-gray-500 mt-1">
                     {STRATEGIES.find(s => s.value === strategy)?.description}
                   </p>
-                </div>
-
-                {/* Date Range */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
+                  <label className="block text-xs font-medium text-gray-400 mt-3 mb-1.5 uppercase tracking-wide">
                     Date Range
                   </label>
                   <div className="space-y-2">
@@ -314,7 +310,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                 </div>
 
                 {/* Target + Strategy Params */}
-                <div className={strategy === 'EMA' ? 'lg:col-span-2' : ''}>
+                <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
                     Target Logic
                   </label>
@@ -559,12 +555,15 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                     </div>
                   )}
 
+                </div>
+
+                <div className="md:col-span-2 lg:col-span-3">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.97 }}
                     onClick={handleRun}
                     disabled={isLoading}
-                    className="mt-4 w-full flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition"
+                    className="mt-2 w-full flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition"
                   >
                     {isLoading ? (
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
