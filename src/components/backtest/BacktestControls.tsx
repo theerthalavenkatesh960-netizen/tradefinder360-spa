@@ -440,12 +440,14 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                       <div className="bg-[#0a0a0f]/40 border border-gray-800/60 rounded-lg p-3 space-y-2 xl:col-span-2">
                         <p className="text-xs text-gray-500">Step 1 - Timeframe & Mode</p>
+                        <label className="block text-xs text-gray-400">EMA Mode</label>
                         <select value={emaMode} onChange={(e) => setEmaMode(e.target.value as typeof emaMode)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
                           <option value="CROSSOVER">Crossover</option>
                           <option value="PULLBACK">Pullback</option>
                           <option value="SPEED">Speed</option>
                           <option value="PULLBACK_SPEED">Pullback + Speed</option>
                         </select>
+                        <label className="block text-xs text-gray-400">Timeframe Preset</label>
                         <div className="grid grid-cols-3 gap-2">
                           <button type="button" onClick={() => applyEmaTimeframeDefaults('INTRADAY')} className={`py-1.5 rounded text-xs ${emaTimeframeMode === 'INTRADAY' ? 'bg-indigo-500 text-white' : 'bg-[#0a0a0f]/60 text-gray-400 border border-gray-800'}`}>Intraday</button>
                           <button type="button" onClick={() => applyEmaTimeframeDefaults('SWING')} className={`py-1.5 rounded text-xs ${emaTimeframeMode === 'SWING' ? 'bg-indigo-500 text-white' : 'bg-[#0a0a0f]/60 text-gray-400 border border-gray-800'}`}>Swing</button>
@@ -456,20 +458,30 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                       <div className="bg-[#0a0a0f]/40 border border-gray-800/60 rounded-lg p-3 space-y-2 xl:col-span-2">
                         <p className="text-xs text-gray-500">Step 2 - EMA Inputs</p>
                         <div className="grid grid-cols-2 gap-2">
-                          <input type="number" min={1} value={fastEMA} onChange={(e) => setFastEMA(parseInt(e.target.value) || 9)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white" placeholder="Fast EMA" />
-                          <input type="number" min={1} value={slowEMA} onChange={(e) => setSlowEMA(parseInt(e.target.value) || 21)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white" placeholder="Slow EMA" />
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Fast EMA</label>
+                            <input type="number" min={1} value={fastEMA} onChange={(e) => setFastEMA(parseInt(e.target.value) || 9)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white" placeholder="Fast EMA" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Slow EMA</label>
+                            <input type="number" min={1} value={slowEMA} onChange={(e) => setSlowEMA(parseInt(e.target.value) || 21)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white" placeholder="Slow EMA" />
+                          </div>
                         </div>
                         <label className="flex items-center gap-2 text-xs text-gray-300">
                           <input type="checkbox" checked={useTripleEma} onChange={(e) => setUseTripleEma(e.target.checked)} className="w-4 h-4 accent-indigo-500" />
                           Use Triple EMA
                         </label>
                         {useTripleEma && (
-                          <input type="number" min={1} value={middleEma} onChange={(e) => setMiddleEma(parseInt(e.target.value) || 21)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white" placeholder="Middle EMA" />
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Middle EMA</label>
+                            <input type="number" min={1} value={middleEma} onChange={(e) => setMiddleEma(parseInt(e.target.value) || 21)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white" placeholder="Middle EMA" />
+                          </div>
                         )}
                       </div>
 
                       <div className="bg-[#0a0a0f]/40 border border-gray-800/60 rounded-lg p-3 space-y-2 xl:col-span-2">
                         <p className="text-xs text-gray-500">Step 3 - Filter</p>
+                        <label className="block text-xs text-gray-400">Filter Type</label>
                         <select value={emaFilterType} onChange={(e) => setEmaFilterType(e.target.value as typeof emaFilterType)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
                           <option value="RSI">RSI</option>
                           <option value="VOLUME">Volume</option>
@@ -479,29 +491,54 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
 
                         {emaFilterType === 'RSI' && (
                           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                            <input type="number" value={emaRsiPeriod} onChange={(e) => setEmaRsiPeriod(parseInt(e.target.value) || 14)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Period" />
-                            <input type="number" value={emaRsiMidline} onChange={(e) => setEmaRsiMidline(parseInt(e.target.value) || 50)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Midline" />
-                            <input type="number" value={rsiOverbought} onChange={(e) => setRsiOverbought(parseInt(e.target.value) || 70)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Overbought" />
-                            <input type="number" value={rsiOversold} onChange={(e) => setRsiOversold(parseInt(e.target.value) || 30)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Oversold" />
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">RSI Period</label>
+                              <input type="number" value={emaRsiPeriod} onChange={(e) => setEmaRsiPeriod(parseInt(e.target.value) || 14)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Period" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">RSI Midline</label>
+                              <input type="number" value={emaRsiMidline} onChange={(e) => setEmaRsiMidline(parseInt(e.target.value) || 50)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Midline" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">RSI Overbought</label>
+                              <input type="number" value={rsiOverbought} onChange={(e) => setRsiOverbought(parseInt(e.target.value) || 70)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Overbought" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">RSI Oversold</label>
+                              <input type="number" value={rsiOversold} onChange={(e) => setRsiOversold(parseInt(e.target.value) || 30)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Oversold" />
+                            </div>
                           </div>
                         )}
 
                         {emaFilterType === 'VOLUME' && (
                           <div className="grid grid-cols-2 gap-2">
-                            <input type="number" value={volumeAvgPeriod} onChange={(e) => setVolumeAvgPeriod(parseInt(e.target.value) || 20)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Volume Avg Period" />
-                            <input type="number" step="0.1" value={volumeMultiplier} onChange={(e) => setVolumeMultiplier(parseFloat(e.target.value) || 1.5)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Volume Multiplier" />
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Volume Avg Period</label>
+                              <input type="number" value={volumeAvgPeriod} onChange={(e) => setVolumeAvgPeriod(parseInt(e.target.value) || 20)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Volume Avg Period" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Volume Multiplier</label>
+                              <input type="number" step="0.1" value={volumeMultiplier} onChange={(e) => setVolumeMultiplier(parseFloat(e.target.value) || 1.5)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Volume Multiplier" />
+                            </div>
                           </div>
                         )}
 
                         {emaFilterType === 'SUPPORT_RESISTANCE' && (
                           <div className="grid grid-cols-2 gap-2">
-                            <input type="number" value={srLookbackPeriod} onChange={(e) => setSrLookbackPeriod(parseInt(e.target.value) || 20)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="S/R Lookback" />
-                            <input type="number" step="0.1" value={srBuffer} onChange={(e) => setSrBuffer(parseFloat(e.target.value) || 0.5)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="S/R Buffer %" />
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">S/R Lookback</label>
+                              <input type="number" value={srLookbackPeriod} onChange={(e) => setSrLookbackPeriod(parseInt(e.target.value) || 20)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="S/R Lookback" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">S/R Buffer %</label>
+                              <input type="number" step="0.1" value={srBuffer} onChange={(e) => setSrBuffer(parseFloat(e.target.value) || 0.5)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="S/R Buffer %" />
+                            </div>
                           </div>
                         )}
 
                         {emaFilterType === 'PRICE_ACTION' && (
                           <div className="space-y-2">
+                            <label className="block text-xs text-gray-400">Allowed Patterns</label>
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
                               {['Engulfing', 'Hammer', 'Doji', 'MorningStar'].map((pattern) => {
                                 const typedPattern = pattern as 'Engulfing' | 'Hammer' | 'Doji' | 'MorningStar';
@@ -525,7 +562,10 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                                 );
                               })}
                             </div>
-                            <input type="number" value={candleLookback} onChange={(e) => setCandleLookback(parseInt(e.target.value) || 1)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Candle Lookback" />
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Candle Lookback</label>
+                              <input type="number" value={candleLookback} onChange={(e) => setCandleLookback(parseInt(e.target.value) || 1)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Candle Lookback" />
+                            </div>
                           </div>
                         )}
                       </div>
@@ -533,24 +573,42 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                       <div className="bg-[#0a0a0f]/40 border border-gray-800/60 rounded-lg p-3 space-y-2 md:col-span-2 xl:col-span-2">
                         <p className="text-xs text-gray-500">Step 4 - Trade Management</p>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
-                          <select value={emaSlType} onChange={(e) => setEmaSlType(e.target.value as typeof emaSlType)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
-                            <option value="FIXED_PERCENT">Fixed Percent</option>
-                            <option value="BELOW_EMA">Below EMA</option>
-                            <option value="ATR_BASED">ATR Based</option>
-                          </select>
-                          <input type="number" step="0.1" value={emaSlValue} onChange={(e) => setEmaSlValue(parseFloat(e.target.value) || 1)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="SL Value" />
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Stop Loss Type</label>
+                            <select value={emaSlType} onChange={(e) => setEmaSlType(e.target.value as typeof emaSlType)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
+                              <option value="FIXED_PERCENT">Fixed Percent</option>
+                              <option value="BELOW_EMA">Below EMA</option>
+                              <option value="ATR_BASED">ATR Based</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Stop Loss Value</label>
+                            <input type="number" step="0.1" value={emaSlValue} onChange={(e) => setEmaSlValue(parseFloat(e.target.value) || 1)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="SL Value" />
+                          </div>
                           {emaSlType === 'ATR_BASED' && (
-                            <input type="number" value={emaAtrPeriod} onChange={(e) => setEmaAtrPeriod(parseInt(e.target.value) || 14)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="ATR Period" />
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">ATR Period</label>
+                              <input type="number" value={emaAtrPeriod} onChange={(e) => setEmaAtrPeriod(parseInt(e.target.value) || 14)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="ATR Period" />
+                            </div>
                           )}
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
-                          <input type="number" step="0.1" value={targetRRR} onChange={(e) => setTargetRRR(parseFloat(e.target.value) || 2)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Target RRR" />
-                          <input type="number" value={maxHoldingPeriods} onChange={(e) => setMaxHoldingPeriods(parseInt(e.target.value) || 10)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Max Holding Bars" />
-                          <select value={tradeDirection} onChange={(e) => setTradeDirection(e.target.value as typeof tradeDirection)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
-                            <option value="BOTH">Both</option>
-                            <option value="LONG_ONLY">Long Only</option>
-                            <option value="SHORT_ONLY">Short Only</option>
-                          </select>
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Target RRR</label>
+                            <input type="number" step="0.1" value={targetRRR} onChange={(e) => setTargetRRR(parseFloat(e.target.value) || 2)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Target RRR" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Max Holding Bars</label>
+                            <input type="number" value={maxHoldingPeriods} onChange={(e) => setMaxHoldingPeriods(parseInt(e.target.value) || 10)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Max Holding Bars" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Trade Direction</label>
+                            <select value={tradeDirection} onChange={(e) => setTradeDirection(e.target.value as typeof tradeDirection)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
+                              <option value="BOTH">Both</option>
+                              <option value="LONG_ONLY">Long Only</option>
+                              <option value="SHORT_ONLY">Short Only</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
                     </div>
