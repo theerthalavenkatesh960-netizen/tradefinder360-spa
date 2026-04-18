@@ -385,7 +385,7 @@ export interface BacktestRequest {
   to: string;
   initialCapital?: number;
   strategy: {
-    name: 'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED' | 'SMC_FVG' | 'ORB_FVG_RETEST';
+    name: 'ORB' | 'RSI_REVERSAL' | 'EMA' | 'SMC';
     params: {
       timeframe: number;
       riskPercent: number;
@@ -398,6 +398,26 @@ export interface BacktestRequest {
       rsiOverbought?: number;
       rsiOversold?: number;
       includeOrderBlocks?: boolean;
+      emaFilterType?: 'RSI' | 'VOLUME' | 'SUPPORT_RESISTANCE' | 'PRICE_ACTION';
+      useTripleEma?: boolean;
+      middleEma?: number;
+      emaRsiPeriod?: number;
+      emaRsiMidline?: number;
+      volumeAvgPeriod?: number;
+      volumeMultiplier?: number;
+      srLookbackPeriod?: number;
+      srBuffer?: number;
+      allowedPatterns?: ('Engulfing' | 'Hammer' | 'Doji' | 'MorningStar')[];
+      candleLookback?: number;
+      emaSlType?: 'FIXED_PERCENT' | 'BELOW_EMA' | 'ATR_BASED';
+      emaSlValue?: number;
+      emaAtrPeriod?: number;
+      targetRRR?: number;
+      maxHoldingPeriods?: number;
+      tradeDirection?: 'LONG_ONLY' | 'SHORT_ONLY' | 'BOTH';
+      emaMode?: 'CROSSOVER' | 'PULLBACK' | 'SPEED' | 'PULLBACK_SPEED';
+      orbMode?: 'CLASSIC' | 'FVG_RETEST';
+      smcMode?: 'FVG_OB';
     };
   };
 }

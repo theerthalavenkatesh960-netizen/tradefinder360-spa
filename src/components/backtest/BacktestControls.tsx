@@ -11,14 +11,10 @@ interface BacktestControlsProps {
 }
 
 const STRATEGIES = [
-  { value: 'ORB', label: 'Opening Range Breakout', description: '5-min high/low breakout' },
+  { value: 'ORB', label: 'ORB', description: 'Opening Range Breakout family' },
   { value: 'RSI_REVERSAL', label: 'RSI Reversal', description: 'Overbought/oversold reversal' },
-  { value: 'EMA_CROSSOVER', label: 'EMA Crossover', description: 'Fast/slow EMA cross' },
-  { value: 'EMA_PULLBACK', label: 'EMA Pullback', description: 'Crossover + retest entry' },
-  { value: 'EMA_SPEED', label: 'EMA Speed', description: 'Shallow pullback + momentum body' },
-  { value: 'EMA_PULLBACK_SPEED', label: 'EMA Pullback + Speed', description: 'Crossover + trend continuation' },
-  { value: 'SMC_FVG', label: 'SMC FVG + Order Block', description: 'Fair Value Gap with order blocks' },
-  { value: 'ORB_FVG_RETEST', label: 'ORB + FVG Retest', description: 'Breakout → FVG → Retest → Engulf' },
+  { value: 'EMA', label: 'EMA', description: 'EMA strategy family (crossover, pullback, speed)' },
+  { value: 'SMC', label: 'SMC', description: 'SMC FVG + Order Block family' },
 ] as const;
 
 const TIMEFRAMES = [
@@ -41,7 +37,10 @@ const TARGET_TYPES = [
 
 export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsProps) => {
   const [expanded, setExpanded] = useState(true);
-  const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA_CROSSOVER' | 'EMA_PULLBACK' | 'EMA_SPEED' | 'EMA_PULLBACK_SPEED' | 'SMC_FVG' | 'ORB_FVG_RETEST'>('ORB');
+  const [strategy, setStrategy] = useState<'ORB' | 'RSI_REVERSAL' | 'EMA' | 'SMC'>('ORB');
+  const [emaMode, setEmaMode] = useState<'CROSSOVER' | 'PULLBACK' | 'SPEED' | 'PULLBACK_SPEED'>('CROSSOVER');
+  const [orbMode, setOrbMode] = useState<'CLASSIC' | 'FVG_RETEST'>('CLASSIC');
+  const [smcMode, setSmcMode] = useState<'FVG_OB'>('FVG_OB');
   // const [from, setFrom] = useState(format(subDays(new Date(), 90), 'yyyy-MM-dd'));
   // const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [from, setFrom] = useState('2026-01-19');
@@ -58,6 +57,38 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
   const [rsiOversold, setRsiOversold] = useState(30);
   const [capital, setCapital] = useState(100000);
   const [includeOrderBlocks, setIncludeOrderBlocks] = useState(false);
+  const [emaTimeframeMode, setEmaTimeframeMode] = useState<'INTRADAY' | 'SWING' | 'BOTH'>('INTRADAY');
+  const [useTripleEma, setUseTripleEma] = useState(false);
+  const [middleEma, setMiddleEma] = useState(21);
+  const [emaFilterType, setEmaFilterType] = useState<'RSI' | 'VOLUME' | 'SUPPORT_RESISTANCE' | 'PRICE_ACTION'>('RSI');
+  const [emaRsiPeriod, setEmaRsiPeriod] = useState(14);
+  const [emaRsiMidline, setEmaRsiMidline] = useState(50);
+  const [volumeAvgPeriod, setVolumeAvgPeriod] = useState(20);
+  const [volumeMultiplier, setVolumeMultiplier] = useState(1.5);
+  const [srLookbackPeriod, setSrLookbackPeriod] = useState(20);
+  const [srBuffer, setSrBuffer] = useState(0.5);
+  const [allowedPatterns, setAllowedPatterns] = useState<Array<'Engulfing' | 'Hammer' | 'Doji' | 'MorningStar'>>(['Engulfing']);
+  const [candleLookback, setCandleLookback] = useState(1);
+  const [emaSlType, setEmaSlType] = useState<'FIXED_PERCENT' | 'BELOW_EMA' | 'ATR_BASED'>('FIXED_PERCENT');
+  const [emaSlValue, setEmaSlValue] = useState(1);
+  const [emaAtrPeriod, setEmaAtrPeriod] = useState(14);
+  const [targetRRR, setTargetRRR] = useState(2);
+  const [maxHoldingPeriods, setMaxHoldingPeriods] = useState(10);
+  const [tradeDirection, setTradeDirection] = useState<'LONG_ONLY' | 'SHORT_ONLY' | 'BOTH'>('BOTH');
+
+  const applyEmaTimeframeDefaults = (mode: 'INTRADAY' | 'SWING' | 'BOTH') => {
+    setEmaTimeframeMode(mode);
+    if (mode === 'INTRADAY') {
+      setFastEMA(9);
+      setSlowEMA(21);
+      setMiddleEma(21);
+    }
+    if (mode === 'SWING') {
+      setFastEMA(20);
+      setSlowEMA(50);
+      setMiddleEma(21);
+    }
+  };
 
   const handleRun = () => {
     const request: BacktestRequest = {
@@ -74,11 +105,31 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
           targetType,
           rrRatio: targetType === 'RR_RATIO' ? rrRatio : undefined,
           slPercent: slType === 'FIXED_PERCENT' ? slPercent : undefined,
-          fastEMA: (strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK' || strategy === 'EMA_SPEED' || strategy === 'EMA_PULLBACK_SPEED') ? fastEMA : undefined,
-          slowEMA: (strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK' || strategy === 'EMA_SPEED' || strategy === 'EMA_PULLBACK_SPEED') ? slowEMA : undefined,
+          fastEMA: strategy === 'EMA' ? fastEMA : undefined,
+          slowEMA: strategy === 'EMA' ? slowEMA : undefined,
           rsiOverbought: strategy === 'RSI_REVERSAL' ? rsiOverbought : undefined,
           rsiOversold: strategy === 'RSI_REVERSAL' ? rsiOversold : undefined,
-          includeOrderBlocks: strategy === 'ORB_FVG_RETEST' ? includeOrderBlocks : undefined,
+          includeOrderBlocks: strategy === 'ORB' && orbMode === 'FVG_RETEST' ? includeOrderBlocks : undefined,
+          emaFilterType: strategy === 'EMA' ? emaFilterType : undefined,
+          useTripleEma: strategy === 'EMA' ? useTripleEma : undefined,
+          middleEma: strategy === 'EMA' ? middleEma : undefined,
+          emaRsiPeriod: strategy === 'EMA' ? emaRsiPeriod : undefined,
+          emaRsiMidline: strategy === 'EMA' ? emaRsiMidline : undefined,
+          volumeAvgPeriod: strategy === 'EMA' ? volumeAvgPeriod : undefined,
+          volumeMultiplier: strategy === 'EMA' ? volumeMultiplier : undefined,
+          srLookbackPeriod: strategy === 'EMA' ? srLookbackPeriod : undefined,
+          srBuffer: strategy === 'EMA' ? srBuffer : undefined,
+          allowedPatterns: strategy === 'EMA' ? allowedPatterns : undefined,
+          candleLookback: strategy === 'EMA' ? candleLookback : undefined,
+          emaSlType: strategy === 'EMA' ? emaSlType : undefined,
+          emaSlValue: strategy === 'EMA' ? emaSlValue : undefined,
+          emaAtrPeriod: strategy === 'EMA' ? emaAtrPeriod : undefined,
+          targetRRR: strategy === 'EMA' ? targetRRR : undefined,
+          maxHoldingPeriods: strategy === 'EMA' ? maxHoldingPeriods : undefined,
+          tradeDirection: strategy === 'EMA' ? tradeDirection : undefined,
+          emaMode: strategy === 'EMA' ? emaMode : undefined,
+          orbMode: strategy === 'ORB' ? orbMode : undefined,
+          smcMode: strategy === 'SMC' ? smcMode : undefined,
         },
       },
     };
@@ -302,34 +353,130 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                     </>
                   )}
 
-                  {(strategy === 'EMA_CROSSOVER' || strategy === 'EMA_PULLBACK' || strategy === 'EMA_SPEED' || strategy === 'EMA_PULLBACK_SPEED') && (
-                    <div className="mt-3 space-y-2">
+                  {strategy === 'EMA' && (
+                    <div className="mt-3 space-y-3">
                       <label className="block text-xs font-medium text-gray-400 uppercase tracking-wide">
-                        EMA Periods
+                        EMA Family Config
                       </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Fast</p>
-                          <input
-                            type="number"
-                            min={1}
-                            max={50}
-                            value={fastEMA}
-                            onChange={(e) => setFastEMA(parseInt(e.target.value))}
-                            className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
-                          />
+
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">EMA Mode</p>
+                        <select value={emaMode} onChange={(e) => setEmaMode(e.target.value as typeof emaMode)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
+                          <option value="CROSSOVER">Crossover</option>
+                          <option value="PULLBACK">Pullback</option>
+                          <option value="SPEED">Speed</option>
+                          <option value="PULLBACK_SPEED">Pullback + Speed</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Step 1 - Timeframe Defaults</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button type="button" onClick={() => applyEmaTimeframeDefaults('INTRADAY')} className={`py-1.5 rounded text-xs ${emaTimeframeMode === 'INTRADAY' ? 'bg-indigo-500 text-white' : 'bg-[#0a0a0f]/60 text-gray-400 border border-gray-800'}`}>Intraday</button>
+                          <button type="button" onClick={() => applyEmaTimeframeDefaults('SWING')} className={`py-1.5 rounded text-xs ${emaTimeframeMode === 'SWING' ? 'bg-indigo-500 text-white' : 'bg-[#0a0a0f]/60 text-gray-400 border border-gray-800'}`}>Swing</button>
+                          <button type="button" onClick={() => applyEmaTimeframeDefaults('BOTH')} className={`py-1.5 rounded text-xs ${emaTimeframeMode === 'BOTH' ? 'bg-indigo-500 text-white' : 'bg-[#0a0a0f]/60 text-gray-400 border border-gray-800'}`}>Both</button>
                         </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Slow</p>
-                          <input
-                            type="number"
-                            min={1}
-                            max={200}
-                            value={slowEMA}
-                            onChange={(e) => setSlowEMA(parseInt(e.target.value))}
-                            className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
-                          />
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Step 2 - EMA Inputs</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="number" min={1} value={fastEMA} onChange={(e) => setFastEMA(parseInt(e.target.value) || 9)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white" placeholder="Fast EMA" />
+                          <input type="number" min={1} value={slowEMA} onChange={(e) => setSlowEMA(parseInt(e.target.value) || 21)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white" placeholder="Slow EMA" />
                         </div>
+                        <label className="flex items-center gap-2 mt-2 text-xs text-gray-300">
+                          <input type="checkbox" checked={useTripleEma} onChange={(e) => setUseTripleEma(e.target.checked)} className="w-4 h-4 accent-indigo-500" />
+                          Use Triple EMA
+                        </label>
+                        {useTripleEma && (
+                          <input type="number" min={1} value={middleEma} onChange={(e) => setMiddleEma(parseInt(e.target.value) || 21)} className="mt-2 w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white" placeholder="Middle EMA" />
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Step 3 - Filter</p>
+                        <select value={emaFilterType} onChange={(e) => setEmaFilterType(e.target.value as typeof emaFilterType)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
+                          <option value="RSI">RSI</option>
+                          <option value="VOLUME">Volume</option>
+                          <option value="SUPPORT_RESISTANCE">Support & Resistance</option>
+                          <option value="PRICE_ACTION">Price Action</option>
+                        </select>
+
+                        {emaFilterType === 'RSI' && (
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <input type="number" value={emaRsiPeriod} onChange={(e) => setEmaRsiPeriod(parseInt(e.target.value) || 14)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Period" />
+                            <input type="number" value={emaRsiMidline} onChange={(e) => setEmaRsiMidline(parseInt(e.target.value) || 50)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Midline" />
+                            <input type="number" value={rsiOverbought} onChange={(e) => setRsiOverbought(parseInt(e.target.value) || 70)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Overbought" />
+                            <input type="number" value={rsiOversold} onChange={(e) => setRsiOversold(parseInt(e.target.value) || 30)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="RSI Oversold" />
+                          </div>
+                        )}
+
+                        {emaFilterType === 'VOLUME' && (
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <input type="number" value={volumeAvgPeriod} onChange={(e) => setVolumeAvgPeriod(parseInt(e.target.value) || 20)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Volume Avg Period" />
+                            <input type="number" step="0.1" value={volumeMultiplier} onChange={(e) => setVolumeMultiplier(parseFloat(e.target.value) || 1.5)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Volume Multiplier" />
+                          </div>
+                        )}
+
+                        {emaFilterType === 'SUPPORT_RESISTANCE' && (
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <input type="number" value={srLookbackPeriod} onChange={(e) => setSrLookbackPeriod(parseInt(e.target.value) || 20)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="S/R Lookback" />
+                            <input type="number" step="0.1" value={srBuffer} onChange={(e) => setSrBuffer(parseFloat(e.target.value) || 0.5)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="S/R Buffer %" />
+                          </div>
+                        )}
+
+                        {emaFilterType === 'PRICE_ACTION' && (
+                          <div className="mt-2 space-y-2">
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              {['Engulfing', 'Hammer', 'Doji', 'MorningStar'].map((pattern) => {
+                                const typedPattern = pattern as 'Engulfing' | 'Hammer' | 'Doji' | 'MorningStar';
+                                const checked = allowedPatterns.includes(typedPattern);
+                                return (
+                                  <label key={pattern} className="flex items-center gap-2 text-gray-300">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setAllowedPatterns((prev) => Array.from(new Set([...prev, typedPattern])));
+                                        } else {
+                                          setAllowedPatterns((prev) => prev.filter((p) => p !== typedPattern));
+                                        }
+                                      }}
+                                      className="w-3.5 h-3.5 accent-indigo-500"
+                                    />
+                                    {pattern}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <input type="number" value={candleLookback} onChange={(e) => setCandleLookback(parseInt(e.target.value) || 1)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Candle Lookback" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Step 4 - Trade Management</p>
+                        <select value={emaSlType} onChange={(e) => setEmaSlType(e.target.value as typeof emaSlType)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
+                          <option value="FIXED_PERCENT">Fixed Percent</option>
+                          <option value="BELOW_EMA">Below EMA</option>
+                          <option value="ATR_BASED">ATR Based</option>
+                        </select>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          <input type="number" step="0.1" value={emaSlValue} onChange={(e) => setEmaSlValue(parseFloat(e.target.value) || 1)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="SL Value" />
+                          {emaSlType === 'ATR_BASED' && (
+                            <input type="number" value={emaAtrPeriod} onChange={(e) => setEmaAtrPeriod(parseInt(e.target.value) || 14)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="ATR Period" />
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          <input type="number" step="0.1" value={targetRRR} onChange={(e) => setTargetRRR(parseFloat(e.target.value) || 2)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Target RRR" />
+                          <input type="number" value={maxHoldingPeriods} onChange={(e) => setMaxHoldingPeriods(parseInt(e.target.value) || 10)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded px-2 py-1 text-sm text-white" placeholder="Max Holding Bars" />
+                        </div>
+                        <select value={tradeDirection} onChange={(e) => setTradeDirection(e.target.value as typeof tradeDirection)} className="w-full mt-2 bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
+                          <option value="BOTH">Both</option>
+                          <option value="LONG_ONLY">Long Only</option>
+                          <option value="SHORT_ONLY">Short Only</option>
+                        </select>
                       </div>
                     </div>
                   )}
@@ -366,8 +513,16 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                     </div>
                   )}
 
-                  {strategy === 'ORB_FVG_RETEST' && (
+                  {strategy === 'ORB' && (
                     <div className="mt-3 space-y-2">
+                      <label className="block text-xs font-medium text-gray-400 uppercase tracking-wide">
+                        ORB Mode
+                      </label>
+                      <select value={orbMode} onChange={(e) => setOrbMode(e.target.value as typeof orbMode)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
+                        <option value="CLASSIC">Classic</option>
+                        <option value="FVG_RETEST">FVG Retest</option>
+                      </select>
+
                       <label className="block text-xs font-medium text-gray-400 uppercase tracking-wide">
                         Replay Overlays
                       </label>
@@ -376,11 +531,32 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                           type="checkbox"
                           checked={includeOrderBlocks}
                           onChange={(e) => setIncludeOrderBlocks(e.target.checked)}
+                          disabled={orbMode !== 'FVG_RETEST'}
                           className="w-4 h-4 accent-indigo-500 cursor-pointer rounded"
                         />
                         <label className="text-xs text-gray-300 cursor-pointer flex-1">
-                          Show Order Blocks in Replay
+                          Show Order Blocks in Replay (FVG Retest mode)
                         </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {strategy === 'SMC' && (
+                    <div className="mt-3 space-y-2">
+                      <label className="block text-xs font-medium text-gray-400 uppercase tracking-wide">
+                        SMC Configuration
+                      </label>
+                      <p className="text-xs text-gray-400">
+                        Fair Value Gap + Order Block trading strategy
+                      </p>
+                      <div className="bg-[#0a0a0f]/40 p-3 rounded-lg border border-gray-800/50">
+                        <p className="text-xs text-gray-400">
+                          ✓ Detects 3-candle FVG formations<br/>
+                          ✓ Waits for retracement into FVG zone<br/>
+                          ✓ Enters on engulfing confirmation<br/>
+                          ✓ SL just outside FVG bounds<br/>
+                          ✓ Target: 3:1 Risk:Reward
+                        </p>
                       </div>
                     </div>
                   )}
