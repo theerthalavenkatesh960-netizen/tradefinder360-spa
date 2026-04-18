@@ -438,7 +438,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                     </label>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                      <div className="bg-[#0a0a0f]/40 border border-gray-800/60 rounded-lg p-3 space-y-2">
+                      <div className="bg-[#0a0a0f]/40 border border-gray-800/60 rounded-lg p-3 space-y-2 xl:col-span-2">
                         <p className="text-xs text-gray-500">Step 1 - Timeframe & Mode</p>
                         <select value={emaMode} onChange={(e) => setEmaMode(e.target.value as typeof emaMode)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
                           <option value="CROSSOVER">Crossover</option>
@@ -453,7 +453,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                         </div>
                       </div>
 
-                      <div className="bg-[#0a0a0f]/40 border border-gray-800/60 rounded-lg p-3 space-y-2">
+                      <div className="bg-[#0a0a0f]/40 border border-gray-800/60 rounded-lg p-3 space-y-2 xl:col-span-2">
                         <p className="text-xs text-gray-500">Step 2 - EMA Inputs</p>
                         <div className="grid grid-cols-2 gap-2">
                           <input type="number" min={1} value={fastEMA} onChange={(e) => setFastEMA(parseInt(e.target.value) || 9)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-2 py-1.5 text-sm text-white" placeholder="Fast EMA" />
@@ -530,7 +530,7 @@ export const BacktestControls = ({ symbol, onRun, isLoading }: BacktestControlsP
                         )}
                       </div>
 
-                      <div className="bg-[#0a0a0f]/40 border border-gray-800/60 rounded-lg p-3 space-y-2 md:col-span-2 xl:col-span-4">
+                      <div className="bg-[#0a0a0f]/40 border border-gray-800/60 rounded-lg p-3 space-y-2 md:col-span-2 xl:col-span-2">
                         <p className="text-xs text-gray-500">Step 4 - Trade Management</p>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
                           <select value={emaSlType} onChange={(e) => setEmaSlType(e.target.value as typeof emaSlType)} className="w-full bg-[#0a0a0f]/60 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white">
