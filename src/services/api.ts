@@ -275,6 +275,7 @@ export interface InstrumentSearchRequest {
   derivativesEnabled?: boolean;
   trend?: string;
   minSetupScore?: number;
+  maxSetupScore?: number;
   minAdx?: number;
   rsiBelow?: number;
   rsiAbove?: number;
@@ -307,6 +308,8 @@ export interface InstrumentSearchItem {
   change?: number;
   changePercent?: number;
   trend?: string;
+  setupScore?: number;
+  marketState?: string;
   entryPrice?: number;
   exitPrice?: number;
   stopLoss?: number;
