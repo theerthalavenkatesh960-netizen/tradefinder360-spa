@@ -113,6 +113,73 @@ export interface RadarResponse {
   watchlist: number;
 }
 
+export interface MoverItem {
+  symbol: string;
+  exchange: string;
+  lastClose: number;
+  changePercent: number;
+  atr: number;
+  bias: string;
+  setupScore: number;
+  scannedAt: string;
+}
+
+export interface SectorLeaderItem {
+  symbol: string;
+  exchange: string;
+  lastClose: number;
+  changePercent: number;
+  setupScore: number;
+  bias: string;
+  scannedAt: string;
+}
+
+export interface BreakoutItem {
+  symbol: string;
+  exchange: string;
+  lastClose: number;
+  openRangeHigh: number;
+  openRangeLow: number;
+  breakoutPercent: number;
+  direction: 'LONG' | 'SHORT';
+  setupScore: number;
+  scannedAt: string;
+}
+
+export interface SRProximityItem {
+  symbol: string;
+  exchange: string;
+  lastClose: number;
+  level: number;
+  distancePercent: number;
+  levelType: 'SUPPORT' | 'RESISTANCE';
+  bias: string;
+  setupScore: number;
+  scannedAt: string;
+}
+
+export interface PatternItem {
+  symbol: string;
+  exchange: string;
+  lastClose: number;
+  patternName: string;
+  patternDirection: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  confidence: number;
+  setupScore: number;
+  scannedAt: string;
+}
+
+export interface RadarSections {
+  topGainers: MoverItem[];
+  topLosers: MoverItem[];
+  sectorLeaders: SectorLeaderItem[];
+  breakouts30Min: BreakoutItem[];
+  nearSupport: SRProximityItem[];
+  nearResistance: SRProximityItem[];
+  patterns: PatternItem[];
+  generatedAt: string;
+}
+
 export interface MarketSentiment {
   overall: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
   advancers: number;
@@ -606,6 +673,23 @@ export const api = {
         { headers: getHeaders() }
       );
       if (!response.ok) throw new Error('Failed to fetch top setups');
+      return response.json();
+    },
+
+    getSections: async (
+      timeframe = 15,
+      sectionLimit = 10,
+      srThresholdPct = 1.5
+    ): Promise<RadarSections> => {
+      const params = new URLSearchParams({
+        timeframe: timeframe.toString(),
+        sectionLimit: sectionLimit.toString(),
+        srThresholdPct: srThresholdPct.toString(),
+      });
+      const response = await fetch(`${API_BASE_URL}/radar/sections?${params}`, {
+        headers: getHeaders(),
+      });
+      if (!response.ok) throw new Error('Failed to fetch radar sections');
       return response.json();
     },
   },
