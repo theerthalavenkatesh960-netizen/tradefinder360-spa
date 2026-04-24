@@ -520,6 +520,17 @@ export interface PortfolioOptimization {
   healthScore: number;
 }
 
+export interface AiAnalyzeRequest {
+  prompt: string;
+  model?: string;
+  maxTokens?: number;
+}
+
+export interface AiAnalyzeResponse {
+  text: string;
+  model: string;
+}
+
 export const api = {
   auth: {
     login: async (email: string, password: string) => {
@@ -854,6 +865,23 @@ export const api = {
         body: JSON.stringify(request),
       });
       if (!response.ok) throw new Error('Backtest failed');
+      return response.json();
+    },
+  },
+
+  ai: {
+    analyze: async (request: AiAnalyzeRequest): Promise<AiAnalyzeResponse> => {
+      const response = await fetch(`${API_BASE_URL}/ai/anthropic/analyze`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`AI analyze request failed: ${response.status} - ${details}`);
+      }
+
       return response.json();
     },
   },

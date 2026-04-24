@@ -8,6 +8,7 @@ import type { Analysis, BacktestRequest, BacktestTrade, Candle, EquityPoint, Sto
 import { useWatchlistStore } from '../store/watchlist';
 import { useBacktestStore } from '../store/backtest';
 import { CandleChart } from '../components/CandleChart';
+import { StockAnalysisPanel } from '../components/StockAnalysisPanel';
 import { BacktestControls } from '../components/backtest/BacktestControls';
 import { BacktestMetricsBar } from '../components/backtest/BacktestMetrics';
 import { BacktestChart } from '../components/backtest/BacktestChart';
@@ -1226,6 +1227,8 @@ const StockDetailInner = ({ stock, symbol }: StockDetailInnerProps) => {
                     Analysis is currently unavailable for this symbol/timeframe.
                   </div>
                 )}
+
+                <StockAnalysisPanel symbol={symbol} timeframe={timeframe} />
               </div>
             </div>
           </motion.div>
