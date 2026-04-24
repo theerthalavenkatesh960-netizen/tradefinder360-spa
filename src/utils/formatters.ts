@@ -36,15 +36,18 @@ export const formatNumber = (value: number): string => {
   return new Intl.NumberFormat('en-IN').format(value);
 };
 
-export const formatCompactNumber = (value: number): string => {
-  if (value >= 10000000) {
-    return `₹${(value / 10000000).toFixed(2)}Cr`;
-  } else if (value >= 100000) {
-    return `₹${(value / 100000).toFixed(2)}L`;
-  } else if (value >= 1000) {
-    return `₹${(value / 1000).toFixed(2)}K`;
+export const formatCompactNumber = (value?: number | string | null): string => {
+  if (value === null || value === undefined) return '—';
+  const num = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (typeof num !== 'number' || !Number.isFinite(num)) return '—';
+  if (num >= 10000000) {
+    return `₹${(num / 10000000).toFixed(2)}Cr`;
+  } else if (num >= 100000) {
+    return `₹${(num / 100000).toFixed(2)}L`;
+  } else if (num >= 1000) {
+    return `₹${(num / 1000).toFixed(2)}K`;
   }
-  return `₹${value.toFixed(2)}`;
+  return `₹${num.toFixed(2)}`;
 };
 
 export const formatDateIST = (dateString: string): string => {

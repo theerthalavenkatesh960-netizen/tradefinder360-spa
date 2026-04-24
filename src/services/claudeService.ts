@@ -18,7 +18,7 @@ async function fetchStockDataForAnalysis(
   timeframe: number
 ): Promise<{ indicators: Indicators; candles: Candle[]; summary: Record<string, unknown> }> {
   try {
-    const [indicatorSeries, allCandles, summary] = await Promise.all([
+    const [indicatorSeries, rawCandles, summary] = await Promise.all([
       api.instruments.getIndicators(symbol, timeframe, 10),
       api.candles.get(symbol, timeframe),
       api.instruments.getDetail(symbol),
@@ -44,7 +44,30 @@ async function fetchStockDataForAnalysis(
           timestamp: new Date().toISOString(),
         } as Indicators);
 
-    const candles = allCandles.slice(-10);
+    // Normalize candle data from the API - some backends return an array directly,
+    // others wrap candles in `candles` or `items`, or return an object keyed by timestamp.
+    let allCandlesArray: Candle[] = [];
+
+    if (Array.isArray(rawCandles)) {
+      allCandlesArray = rawCandles as Candle[];
+    } else if (rawCandles && Array.isArray((rawCandles as any).candles)) {
+      allCandlesArray = (rawCandles as any).candles as Candle[];
+    } else if (rawCandles && Array.isArray((rawCandles as any).items)) {
+      allCandlesArray = (rawCandles as any).items as Candle[];
+    } else if (rawCandles && typeof rawCandles === 'object') {
+      // Try converting object values to array (handles keyed-by-timestamp shapes)
+      try {
+        allCandlesArray = Object.values(rawCandles).filter((v: any) => v && v.timestamp) as Candle[];
+      } catch (e) {
+        allCandlesArray = [];
+      }
+    }
+
+    if (!Array.isArray(allCandlesArray)) {
+      allCandlesArray = [];
+    }
+
+    const candles = allCandlesArray.slice(-10);
 
     return { indicators, candles, summary };
   } catch (error) {
