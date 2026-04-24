@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Radar as RadarIcon, TrendingUp, TrendingDown, Zap, Layers, ArrowUpCircle, ArrowDownCircle, Activity, RefreshCw } from 'lucide-react';
 import { api, MoverItem, SectorLeaderItem, BreakoutItem, SRProximityItem, PatternItem } from '../services/api';
+import { TrendCandles } from '../components/TrendCandles';
 import { formatPrice, getBiasColor } from '../utils/formatters';
 
 // ---- Shared formatters (instantiated once, never recreated per render) ----
@@ -55,21 +56,46 @@ const EmptyState = memo(({ label }: { label: string }) => (
   <div className="text-center py-8 text-gray-600 text-sm">{label}</div>
 ));
 
-// ---- Row cards ----
-const MoverRow = memo(({ item }: { item: MoverItem }) => (
+// ---- Enhanced Row cards with trend context ----
+const MoverRow = memo(({ item, isGainer }: { item: MoverItem; isGainer: boolean }) => (
   <Link
     to={`/stocks/${item.symbol}`}
-    className="flex items-center justify-between px-4 py-3 rounded-lg hover:bg-white/5 transition group"
+    className="flex flex-col lg:flex-row lg:items-start gap-3 px-4 py-3 rounded-lg hover:bg-white/5 transition group border border-gray-800/30 hover:border-gray-700/50"
   >
-    <div>
-      <p className="font-semibold text-white group-hover:text-indigo-300 transition text-sm">{item.symbol}</p>
-      <p className="text-xs text-gray-500">{item.exchange}</p>
+    {/* Left: Symbol & Price Info */}
+    <div className="flex items-start justify-between lg:flex-col lg:min-w-max gap-2">
+      <div>
+        <p className="font-semibold text-white group-hover:text-indigo-300 transition text-sm">{item.symbol}</p>
+        <p className="text-xs text-gray-500">{item.exchange}</p>
+      </div>
+      <div className="text-right lg:text-left">
+        <p className="text-gray-300 text-sm font-medium">{formatPrice(item.lastClose)}</p>
+        <p className={`text-sm font-bold ${item.changePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          {pctFmt.format(item.changePercent)}%
+        </p>
+      </div>
     </div>
-    <div className="flex items-center gap-5 text-sm">
-      <span className="text-gray-300">{formatPrice(item.lastClose)}</span>
-      <span className={item.changePercent >= 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
-        {pctFmt.format(item.changePercent)}%
-      </span>
+
+    {/* Middle: Trend Chart */}
+    <div className="lg:flex-1 min-w-fit">
+      <TrendCandles candles={item.trendCandles} symbol={item.symbol} isPositive={isGainer} />
+    </div>
+
+    {/* Right: Score, Bias & AI Insight */}
+    <div className="flex items-center justify-between lg:flex-col lg:items-end gap-3 lg:gap-2 text-sm">
+      <div className="flex items-center gap-2">
+        <span className={`text-xs font-medium px-2 py-0.5 rounded ${getBiasColor(item.bias)}`}>{item.bias}</span>
+        <span className="text-indigo-300 font-bold text-xs bg-indigo-900/30 px-2 py-0.5 rounded">{item.setupScore}%</span>
+      </div>
+      
+      {/* AI Analysis Placeholder */}
+      <div className="text-xs text-gray-400 italic max-w-xs text-right hidden lg:block">
+        {item.aiAnalysis && item.aiAnalysis !== 'Ready' ? (
+          <span className="text-amber-400">{item.aiAnalysis}</span>
+        ) : (
+          <span className="text-gray-500">AI insights pending...</span>
+        )}
+      </div>
     </div>
   </Link>
 ));
@@ -187,11 +213,11 @@ export const Radar = () => {
       {/* Row 1: Movers */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Section title="Top Gainers" icon={<TrendingUp className="w-4 h-4" />} count={data?.topGainers.length} isLoading={isLoading} accent="emerald">
-          {data?.topGainers.length ? data.topGainers.map(item => <MoverRow key={item.symbol} item={item} />) : <EmptyState label="No gainers found" />}
+          {data?.topGainers.length ? data.topGainers.map(item => <MoverRow key={item.symbol} item={item} isGainer={true} />) : <EmptyState label="No gainers found" />}
         </Section>
 
         <Section title="Top Losers" icon={<TrendingDown className="w-4 h-4" />} count={data?.topLosers.length} isLoading={isLoading} accent="red">
-          {data?.topLosers.length ? data.topLosers.map(item => <MoverRow key={item.symbol} item={item} />) : <EmptyState label="No losers found" />}
+          {data?.topLosers.length ? data.topLosers.map(item => <MoverRow key={item.symbol} item={item} isGainer={false} />) : <EmptyState label="No losers found" />}
         </Section>
       </div>
 

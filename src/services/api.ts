@@ -122,6 +122,8 @@ export interface MoverItem {
   bias: string;
   setupScore: number;
   scannedAt: string;
+  trendCandles: Candle[]; // Last 5 days of daily candles for mini-chart
+  aiAnalysis: string; // Placeholder for AI insights
 }
 
 export interface SectorLeaderItem {
