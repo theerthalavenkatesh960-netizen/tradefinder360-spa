@@ -531,6 +531,123 @@ export interface AiAnalyzeResponse {
   model: string;
 }
 
+export interface PortfolioManagerCreateSessionRequest {
+  sessionName: string;
+  budget: number;
+  riskProfile: 'conservative' | 'balanced' | 'aggressive';
+  preferredSectors: string[];
+  preferredThemes: string[];
+  autoRebalanceEnabled: boolean;
+  maxPositions: number;
+  timeframeMinutes: number;
+  minConfidence: number;
+}
+
+export interface PortfolioManagerUpdateSessionRequest {
+  sessionName: string;
+  budget: number;
+  riskProfile: 'conservative' | 'balanced' | 'aggressive';
+  preferredSectors: string[];
+  preferredThemes: string[];
+  autoRebalanceEnabled: boolean;
+  maxPositions: number;
+  timeframeMinutes: number;
+  minConfidence: number;
+}
+
+export interface PortfolioManagerCloneSessionRequest {
+  sessionName?: string;
+}
+
+export interface PortfolioManagerSessionSummary {
+  sessionId: number;
+  sessionName: string;
+  budget: number;
+  riskProfile: string;
+  autoRebalanceEnabled: boolean;
+  maxPositions: number;
+  timeframeMinutes: number;
+  minConfidence: number;
+  status: string;
+  mode: string;
+  openPositions: number;
+  closedPositions: number;
+  allocatedCapital: number;
+  unrealizedPnl: number;
+  realizedPnl: number;
+  winRatePercent: number;
+  lastRunAt?: string;
+  updatedAt: string;
+}
+
+export interface PortfolioManagerPosition {
+  tradeId: number;
+  instrumentId: number;
+  symbol: string;
+  instrumentName: string;
+  sector: string;
+  strategy: string;
+  direction: string;
+  entryPrice: number;
+  currentPrice: number;
+  exitPrice?: number;
+  quantity: number;
+  allocationPercent: number;
+  allocatedCapital: number;
+  confidence: number;
+  fusionScore?: number;
+  fusionNewsSignal?: number;
+  fusionTechnicalSignal?: number;
+  fusionSectorSignal?: number;
+  fusionDirectionVeto?: boolean;
+  fusionIncluded?: boolean;
+  fusionEvidence?: string;
+  pnl?: number;
+  pnlPercent?: number;
+  status: string;
+  entryReasoning: string;
+  exitReasoning?: string;
+  signals: string[];
+  modelProvider: string;
+  modelName: string;
+  openedAt: string;
+  closedAt?: string;
+}
+
+export interface PortfolioManagerSessionDetail {
+  summary: PortfolioManagerSessionSummary;
+  preferredSectors: string[];
+  preferredThemes: string[];
+  openPositions: PortfolioManagerPosition[];
+  closedPositions: PortfolioManagerPosition[];
+}
+
+export interface PortfolioManagerRunResponse {
+  sessionId: number;
+  openPositions: number;
+  allocatedCapital: number;
+  unrealizedPnl: number;
+  provider: string;
+  model: string;
+  runAt: string;
+}
+
+export interface PortfolioManagerNewsItem {
+  articleId: number;
+  source: string;
+  headline: string;
+  summary: string;
+  publishedAt: string;
+  sentiment: string;
+  sentimentScore: number;
+  direction: string;
+  impactScore: number;
+  confidence: number;
+  symbol: string;
+  sector: string;
+  keywords: string[];
+}
+
 export const api = {
   auth: {
     login: async (email: string, password: string) => {
@@ -880,6 +997,212 @@ export const api = {
       if (!response.ok) {
         const details = await response.text();
         throw new Error(`AI analyze request failed: ${response.status} - ${details}`);
+      }
+
+      return response.json();
+    },
+  },
+
+  portfolioManager: {
+    createSession: async (
+      request: PortfolioManagerCreateSessionRequest,
+      userId?: string
+    ): Promise<PortfolioManagerSessionSummary> => {
+      const response = await fetch(`${API_BASE_URL}/portfolio-manager/sessions`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Create session failed: ${response.status} - ${details}`);
+      }
+
+      return response.json();
+    },
+
+    getSessions: async (userId?: string): Promise<PortfolioManagerSessionSummary[]> => {
+      const response = await fetch(`${API_BASE_URL}/portfolio-manager/sessions`, {
+        headers: {
+          ...getHeaders(),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Get sessions failed: ${response.status} - ${details}`);
+      }
+
+      return response.json();
+    },
+
+    getSessionDetail: async (sessionId: number, userId?: string): Promise<PortfolioManagerSessionDetail> => {
+      const response = await fetch(`${API_BASE_URL}/portfolio-manager/sessions/${sessionId}`, {
+        headers: {
+          ...getHeaders(),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Get session detail failed: ${response.status} - ${details}`);
+      }
+
+      return response.json();
+    },
+
+    updateSession: async (
+      sessionId: number,
+      request: PortfolioManagerUpdateSessionRequest,
+      userId?: string
+    ): Promise<PortfolioManagerSessionSummary> => {
+      const response = await fetch(`${API_BASE_URL}/portfolio-manager/sessions/${sessionId}`, {
+        method: 'PUT',
+        headers: {
+          ...getHeaders(),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Update session failed: ${response.status} - ${details}`);
+      }
+
+      return response.json();
+    },
+
+    cloneSession: async (
+      sessionId: number,
+      request: PortfolioManagerCloneSessionRequest,
+      userId?: string
+    ): Promise<PortfolioManagerSessionSummary> => {
+      const response = await fetch(`${API_BASE_URL}/portfolio-manager/sessions/${sessionId}/clone`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Clone session failed: ${response.status} - ${details}`);
+      }
+
+      return response.json();
+    },
+
+    deleteSession: async (sessionId: number, userId?: string): Promise<void> => {
+      const response = await fetch(`${API_BASE_URL}/portfolio-manager/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: {
+          ...getHeaders(),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Delete session failed: ${response.status} - ${details}`);
+      }
+    },
+
+    runSession: async (sessionId: number, userId?: string): Promise<PortfolioManagerRunResponse> => {
+      const response = await fetch(`${API_BASE_URL}/portfolio-manager/sessions/${sessionId}/run`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+        },
+        body: JSON.stringify({ useLatestPreferences: true }),
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Run session failed: ${response.status} - ${details}`);
+      }
+
+      return response.json();
+    },
+
+    startSession: async (sessionId: number, userId?: string): Promise<PortfolioManagerSessionSummary> => {
+      const response = await fetch(`${API_BASE_URL}/portfolio-manager/sessions/${sessionId}/start`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Start session failed: ${response.status} - ${details}`);
+      }
+
+      return response.json();
+    },
+
+    stopSession: async (sessionId: number, userId?: string): Promise<PortfolioManagerSessionSummary> => {
+      const response = await fetch(`${API_BASE_URL}/portfolio-manager/sessions/${sessionId}/stop`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Stop session failed: ${response.status} - ${details}`);
+      }
+
+      return response.json();
+    },
+
+    exportSessionCsv: async (sessionId: number, userId?: string): Promise<Blob> => {
+      const response = await fetch(`${API_BASE_URL}/portfolio-manager/sessions/${sessionId}/export`, {
+        headers: {
+          ...getHeaders(),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Export session failed: ${response.status} - ${details}`);
+      }
+
+      return response.blob();
+    },
+
+    getSessionNews: async (
+      sessionId: number,
+      hoursBack = 24,
+      limit = 50,
+      userId?: string
+    ): Promise<PortfolioManagerNewsItem[]> => {
+      const response = await fetch(
+        `${API_BASE_URL}/portfolio-manager/sessions/${sessionId}/news?hoursBack=${hoursBack}&limit=${limit}`,
+        {
+          headers: {
+            ...getHeaders(),
+            ...(userId ? { 'X-User-Id': userId } : {}),
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Get session news failed: ${response.status} - ${details}`);
       }
 
       return response.json();

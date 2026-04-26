@@ -31,6 +31,7 @@ export const Layout = ({ children }: LayoutProps) => {
     { name: 'Stocks', href: '/stocks', icon: Search },
     { name: 'Radar', href: '/radar', icon: RadarIcon },
     { name: 'Portfolio', href: '/portfolio', icon: Briefcase },
+    { name: 'Portfolio Manager', href: '/portfolio-manager', icon: Briefcase },
     { name: 'Recommendations', href: '/recommendations', icon: List },
     { name: 'Watchlist', href: '/watchlist', icon: Star },
   ];

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { lazy, Suspense } from 'react';
 import { useAuthStore } from './store/auth';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
 const Register = lazy(() => import('./pages/Register').then(m => ({ default: m.Register })));
@@ -11,6 +12,7 @@ const MarketInsightsToday = lazy(() => import('./pages/MarketInsightsToday').the
 const StockExplorer = lazy(() => import('./pages/StockExplorer').then(m => ({ default: m.StockExplorer })));
 const StockDetail = lazy(() => import('./pages/StockDetail').then(m => ({ default: m.StockDetail })));
 const PortfolioBuilder = lazy(() => import('./pages/PortfolioBuilder').then(m => ({ default: m.PortfolioBuilder })));
+const PortfolioManager = lazy(() => import('./pages/PortfolioManager').then(m => ({ default: m.PortfolioManager })));
 const Radar = lazy(() => import('./pages/Radar').then(m => ({ default: m.Radar })));
 const Recommendations = lazy(() => import('./pages/Recommendations').then(m => ({ default: m.Recommendations })));
 const Watchlist = lazy(() => import('./pages/Watchlist').then(m => ({ default: m.Watchlist })));
@@ -44,28 +46,31 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Suspense fallback={<LoadingScreen />}>
-          <Routes>
-            <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-            <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
-            <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Suspense fallback={<LoadingScreen />}>
+            <Routes>
+              <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+              <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+              <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
 
-            <Route path="/" element={<ProtectedRoute><Layout><MarketInsightsToday /></Layout></ProtectedRoute>} />
-            <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
-            <Route path="/stocks" element={<ProtectedRoute><Layout><StockExplorer /></Layout></ProtectedRoute>} />
-            <Route path="/stocks/:symbol" element={<ProtectedRoute><Layout><StockDetail /></Layout></ProtectedRoute>} />
-            <Route path="/portfolio" element={<ProtectedRoute><Layout><PortfolioBuilder /></Layout></ProtectedRoute>} />
-            <Route path="/radar" element={<ProtectedRoute><Layout><Radar /></Layout></ProtectedRoute>} />
-            <Route path="/recommendations" element={<ProtectedRoute><Layout><Recommendations /></Layout></ProtectedRoute>} />
-            <Route path="/watchlist" element={<ProtectedRoute><Layout><Watchlist /></Layout></ProtectedRoute>} />
+              <Route path="/" element={<ProtectedRoute><Layout><MarketInsightsToday /></Layout></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
+              <Route path="/stocks" element={<ProtectedRoute><Layout><StockExplorer /></Layout></ProtectedRoute>} />
+              <Route path="/stocks/:symbol" element={<ProtectedRoute><Layout><StockDetail /></Layout></ProtectedRoute>} />
+              <Route path="/portfolio" element={<ProtectedRoute><Layout><PortfolioBuilder /></Layout></ProtectedRoute>} />
+              <Route path="/portfolio-manager" element={<ProtectedRoute><Layout><PortfolioManager /></Layout></ProtectedRoute>} />
+              <Route path="/radar" element={<ProtectedRoute><Layout><Radar /></Layout></ProtectedRoute>} />
+              <Route path="/recommendations" element={<ProtectedRoute><Layout><Recommendations /></Layout></ProtectedRoute>} />
+              <Route path="/watchlist" element={<ProtectedRoute><Layout><Watchlist /></Layout></ProtectedRoute>} />
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-    </QueryClientProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
