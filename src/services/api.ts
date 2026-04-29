@@ -1,6 +1,46 @@
 const API_BASE_URL = 'https://localhost:61577/api';
 
-const getHeaders = () => {
+export interface AuthUser {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  createdAt: string;
+  name: string;
+}
+
+interface AuthResponse {
+  token: string;
+  refreshToken: string;
+  expiresAt: string;
+  user: {
+    id: number;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    role?: string;
+    createdAt?: string;
+  };
+}
+
+const normalizeAuthUser = (user: AuthResponse['user']): AuthUser => {
+  const firstName = user.firstName ?? '';
+  const lastName = user.lastName ?? '';
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  return {
+    id: user.id,
+    email: user.email,
+    firstName,
+    lastName,
+    role: user.role ?? 'TRADER',
+    createdAt: user.createdAt ?? new Date().toISOString(),
+    name: fullName || user.email,
+  };
+};
+
+export const getHeaders = () => {
   const token = localStorage.getItem('auth_token');
   return {
     'Content-Type': 'application/json',
@@ -650,24 +690,45 @@ export interface PortfolioManagerNewsItem {
 
 export const api = {
   auth: {
-    login: async (email: string, password: string) => {
+    login: async (email: string, password: string): Promise<AuthResponse & { user: AuthUser }> => {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
       if (!response.ok) throw new Error('Login failed');
-      return response.json();
+      const payload = (await response.json()) as AuthResponse;
+      return {
+        ...payload,
+        user: normalizeAuthUser(payload.user),
+      };
     },
 
-    register: async (email: string, password: string, name: string) => {
+    register: async (
+      email: string,
+      password: string,
+      name: string
+    ): Promise<AuthResponse & { user: AuthUser }> => {
+      const [firstName, ...lastNameParts] = name.trim().split(/\s+/);
+      const lastName = lastNameParts.join(' ');
+
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({
+          email,
+          password,
+          name,
+          firstName: firstName || undefined,
+          lastName: lastName || undefined,
+        }),
       });
       if (!response.ok) throw new Error('Registration failed');
-      return response.json();
+      const payload = (await response.json()) as AuthResponse;
+      return {
+        ...payload,
+        user: normalizeAuthUser(payload.user),
+      };
     },
 
     resetPassword: async (email: string) => {

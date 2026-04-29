@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { LearningResult, useLearning, FusionConfigSnapshot } from '../hooks/useLearning';
+import { LearningResult, useLearning } from '../hooks/useLearning';
 
 interface ConfigHistoryProps {
   compact?: boolean;

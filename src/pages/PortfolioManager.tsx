@@ -309,10 +309,10 @@ export const PortfolioManager = () => {
         <div className="mt-4">
           <button
             onClick={() => createSessionMutation.mutate()}
-            disabled={createSessionMutation.isLoading}
+            disabled={createSessionMutation.isPending}
             className="px-5 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 transition"
           >
-            {createSessionMutation.isLoading ? 'Creating...' : 'Create Portfolio Session'}
+            {createSessionMutation.isPending ? 'Creating...' : 'Create Portfolio Session'}
           </button>
           {createSessionMutation.error && (
             <p className="text-red-400 text-sm mt-2">{(createSessionMutation.error as Error).message}</p>
@@ -354,7 +354,7 @@ export const PortfolioManager = () => {
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => runMutation.mutate(selectedSession.sessionId)}
-                  disabled={runMutation.isLoading}
+                  disabled={runMutation.isPending}
                   className="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 transition"
                 >
                   <Play className="w-4 h-4 mr-2" />
@@ -362,7 +362,7 @@ export const PortfolioManager = () => {
                 </button>
                 <button
                   onClick={() => startMutation.mutate(selectedSession.sessionId)}
-                  disabled={startMutation.isLoading}
+                  disabled={startMutation.isPending}
                   className="inline-flex items-center px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-60 transition"
                 >
                   <Play className="w-4 h-4 mr-2" />
@@ -370,7 +370,7 @@ export const PortfolioManager = () => {
                 </button>
                 <button
                   onClick={() => stopMutation.mutate(selectedSession.sessionId)}
-                  disabled={stopMutation.isLoading}
+                  disabled={stopMutation.isPending}
                   className="inline-flex items-center px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-60 transition"
                 >
                   <Pause className="w-4 h-4 mr-2" />
@@ -378,7 +378,7 @@ export const PortfolioManager = () => {
                 </button>
                 <button
                   onClick={() => exportMutation.mutate(selectedSession)}
-                  disabled={exportMutation.isLoading}
+                  disabled={exportMutation.isPending}
                   className="inline-flex items-center px-4 py-2 rounded-lg border border-gray-700 hover:bg-gray-800 disabled:opacity-60 transition"
                 >
                   <Download className="w-4 h-4 mr-2" />
@@ -386,14 +386,14 @@ export const PortfolioManager = () => {
                 </button>
                 <button
                   onClick={() => cloneMutation.mutate(selectedSession)}
-                  disabled={cloneMutation.isLoading}
+                  disabled={cloneMutation.isPending}
                   className="inline-flex items-center px-4 py-2 rounded-lg border border-indigo-700 text-indigo-200 hover:bg-indigo-950/40 disabled:opacity-60 transition"
                 >
                   Clone
                 </button>
                 <button
                   onClick={() => deleteMutation.mutate(selectedSession)}
-                  disabled={deleteMutation.isLoading}
+                  disabled={deleteMutation.isPending}
                   className="inline-flex items-center px-4 py-2 rounded-lg border border-red-700 text-red-200 hover:bg-red-950/40 disabled:opacity-60 transition"
                 >
                   Delete
@@ -469,10 +469,10 @@ export const PortfolioManager = () => {
                 </div>
                 <button
                   onClick={() => updateMutation.mutate(selectedSession.sessionId)}
-                  disabled={updateMutation.isLoading}
+                  disabled={updateMutation.isPending}
                   className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-60 transition"
                 >
-                  {updateMutation.isLoading ? 'Saving...' : 'Save Session Settings'}
+                  {updateMutation.isPending ? 'Saving...' : 'Save Session Settings'}
                 </button>
                 {updateMutation.error && (
                   <p className="text-red-400 text-sm">{(updateMutation.error as Error).message}</p>

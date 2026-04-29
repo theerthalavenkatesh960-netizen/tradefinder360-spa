@@ -12,7 +12,7 @@ interface TrendCandlesProps {
  * Renders 5 small candles (or fewer if data is sparse) with hover tooltips.
  * Compact and responsive design optimized for embedded display.
  */
-export const TrendCandles = memo(({ candles, symbol, isPositive }: TrendCandlesProps) => {
+export const TrendCandles = memo(({ candles, isPositive }: TrendCandlesProps) => {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   if (!candles || candles.length === 0) {

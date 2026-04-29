@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { getHeaders } from '../services/api';
 
 export interface LearningResult {
   iterationNumber: number;
@@ -94,6 +95,13 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
     setState(prev => ({ ...prev, isLoading }));
   }, []);
 
+  const getLearningHeaders = useCallback((userId?: string) => {
+    return {
+      ...getHeaders(),
+      ...(userId ? { 'X-User-Id': userId } : {}),
+    };
+  }, []);
+
   const triggerLearning = useCallback(
     async (options?: TriggerOptions): Promise<LearningResult> => {
       setLoading(true);
@@ -102,7 +110,7 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
       try {
         const response = await fetch(`${apiBaseUrl}/portfolio/learning/trigger`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getLearningHeaders(options?.userId),
           body: JSON.stringify({
             userId: options?.userId,
             triggerSource: options?.triggerSource ?? 'USER_MANUAL',
@@ -131,7 +139,7 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
         setLoading(false);
       }
     },
-    [apiBaseUrl]
+    [apiBaseUrl, getLearningHeaders]
   );
 
   const approveConfig = useCallback(
@@ -142,7 +150,10 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
       try {
         const response = await fetch(
           `${apiBaseUrl}/portfolio/learning/approve/${configId}`,
-          { method: 'POST' }
+          {
+            method: 'POST',
+            headers: getLearningHeaders(),
+          }
         );
 
         if (!response.ok) {
@@ -166,7 +177,7 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
         setLoading(false);
       }
     },
-    [apiBaseUrl]
+    [apiBaseUrl, getLearningHeaders]
   );
 
   const rejectConfig = useCallback(
@@ -177,7 +188,10 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
       try {
         const response = await fetch(
           `${apiBaseUrl}/portfolio/learning/reject/${configId}`,
-          { method: 'POST' }
+          {
+            method: 'POST',
+            headers: getLearningHeaders(),
+          }
         );
 
         if (!response.ok) {
@@ -200,7 +214,7 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
         setLoading(false);
       }
     },
-    [apiBaseUrl]
+    [apiBaseUrl, getLearningHeaders]
   );
 
   const rollbackConfig = useCallback(async (): Promise<LearningResult> => {
@@ -210,6 +224,7 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
     try {
       const response = await fetch(`${apiBaseUrl}/portfolio/learning/rollback`, {
         method: 'POST',
+        headers: getLearningHeaders(),
       });
 
       if (!response.ok) {
@@ -232,7 +247,7 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
     } finally {
       setLoading(false);
     }
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, getLearningHeaders]);
 
   const fetchHistory = useCallback(
     async (limit: number = 10): Promise<void> => {
@@ -241,7 +256,10 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
 
       try {
         const response = await fetch(
-          `${apiBaseUrl}/portfolio/learning/history?limit=${limit}`
+          `${apiBaseUrl}/portfolio/learning/history?limit=${limit}`,
+          {
+            headers: getLearningHeaders(),
+          }
         );
 
         if (!response.ok) {
@@ -257,7 +275,7 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
         setLoading(false);
       }
     },
-    [apiBaseUrl]
+    [apiBaseUrl, getLearningHeaders]
   );
 
   const fetchCurrentConfig = useCallback(async (): Promise<void> => {
@@ -265,7 +283,9 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
     setError(undefined);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/portfolio/learning/current-config`);
+      const response = await fetch(`${apiBaseUrl}/portfolio/learning/current-config`, {
+        headers: getLearningHeaders(),
+      });
 
       if (response.status === 404) {
         setState(prev => ({ ...prev, currentConfig: undefined }));
@@ -284,7 +304,7 @@ export const useLearning = (apiBaseUrl: string = '/api'): UseLearningHook => {
     } finally {
       setLoading(false);
     }
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, getLearningHeaders]);
 
   const clearError = useCallback(() => {
     setError(undefined);
